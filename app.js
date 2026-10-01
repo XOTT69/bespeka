@@ -4,13 +4,13 @@ const SHELTERS_URL = API_BASE.startsWith('http') ? API_BASE + '/shelters' : './s
 const ALERTS_URL = API_BASE.startsWith('http') ? API_BASE + '/alerts' : './alert-status.json';
 const UKRAINE_GEOJSON = 'https://cdn.jsdelivr.net/gh/darmat1/ukraine-geo-data@main/geodata/Ukraine.geojson';
 const KYIV_RAIONS_GEOJSON = 'https://cdn.jsdelivr.net/gh/darmat1/ukraine-geo-data@main/geodata/kyyivska_oblast.geojson';
-const CACHE_KEY = 'bespeka-shelters-v6';
+const CACHE_KEY = 'bespeka-shelters-v8';
 const FAV_KEY = 'bespeka-favorites-v1';
 
 const $ = id => document.getElementById(id);
 const favorites = new Set(JSON.parse(localStorage.getItem(FAV_KEY) || '[]'));
 let shelters = [], filtered = [], activeFilter = 'all', userPos = null, userMarker = null, nearestShelter = null;
-let currentTab = 'map', deferredPrompt = null, alerts = [], alertGeoLayer = null, alertsLoaded = false, kyivAlertMarker = null;
+let currentTab = 'map', deferredPrompt = null, alerts = [], alertGeoLayer = null, alertsLoaded = false, alertScope = 'kyiv';
 
 const map = L.map('map', { zoomControl: true }).setView([50.36, 30.43], 9);
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(map);
@@ -39,7 +39,7 @@ function applyFilter(){
     if(activeFilter==='kyiv'&&s.source!=='kyiv_official')return false;
     if(activeFilter==='accessible'&&!s.accessible)return false;
     if(activeFilter==='favorites'&&!favorites.has(s.id))return false;
-    if(q&&!norm([s.name,s.address,s.city].join(' ')).includes(q))return false;
+    if(q&&!norm([s.name,s.address,s.city,s.district,s.community].join(' ')).includes(q))return false;
     return true;
   });
   renderShelterMap();
@@ -69,7 +69,7 @@ function renderShelterList(){
     return `<button class="list-item" data-id="${esc(s.id)}">
       <div class="list-item-top">
         <span class="list-pin">⌖</span>
-        <span class="list-main"><b>${fav}${esc(s.name)}</b><small>${esc(s.address)}</small></span>
+        <span class="list-main"><b>${fav}${esc(s.name)}</b><small>${esc(s.address)}${s.district?' · '+esc(s.district):''}</small></span>
         ${d}
       </div>
       <div class="mini-tags"><span class="mini-tag ${s.source==='kyiv_official'?'official':''}">${s.source==='kyiv_official'?'Київ · КМДА':'Область · ДСНС'}</span>${s.accessible?'<span class="mini-tag">♿ доступність</span>':''}</div>
@@ -98,7 +98,7 @@ function openShelter(s){
   const fav=favorites.has(s.id);
   $('sheetContent').innerHTML=`
     <h2>${esc(s.name)}</h2>
-    <div class="meta">${esc(s.address)}</div>
+    <div class="meta">${esc(s.address)}${s.district?'<br>'+esc(s.district):''}${s.community?' · '+esc(s.community):''}</div>
     ${photo}
     <div class="badges">
       <span class="badge ${s.source==='kyiv_official'?'green':'blue'}">${esc(sourceLabel(s))}</span>
@@ -147,8 +147,9 @@ function setKyivBanner(data){
   const active=data.active===true;
   b.className='alert-banner '+(data.active===null||data.active===undefined?'alert-unknown':active?'alert-active':'alert-safe');
   const details=[...(data.alert_types||[]).map(alertTypeLabel),...(data.threats||[]).map(threatLabel)];
+  const districts=[...new Set((data.active_locations||[]).map(x=>x.raion).filter(Boolean))];
   $('alertTitle').textContent=active?(details[0]||'Тривога у Київській області'):'Тривоги немає';
-  $('alertText').textContent=active?(details.slice(1,3).join(' · ')||'Київська область'):'Київська область · '+formatTime(data.updated_at);
+  $('alertText').textContent=active?(districts.slice(0,3).join(' · ')||details.slice(1,3).join(' · ')||'Київська область'):'Київська область · '+formatTime(data.updated_at);
 }
 
 async function refreshStatus(){
