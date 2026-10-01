@@ -555,12 +555,32 @@ function setAlertPill(data){
   $('alertPillTitle').textContent=active?(labels[0]||'Тривога на Київщині'):'Тривоги немає';
   $('alertPillText').textContent=active?(districts.slice(0,2).join(' · ')||labels.slice(1,3).join(' · ')||'Київська область'):'Київська область · '+formatTime(data.updated_at);
 }
+function clientKyivStatus(items,updatedAt){
+  const relevant=(items||[]).filter(isKyivOblastAlert);
+  const threats=[...new Set(relevant.flatMap(a=>(a.threats||[]).map(t=>t.threat_type).filter(Boolean)))];
+  const types=[...new Set(relevant.map(a=>a.alert_type).filter(Boolean))];
+  return {
+    active:relevant.length>0,
+    updated_at:updatedAt||null,
+    alert_types:types,
+    threats,
+    active_locations:relevant.map(a=>({title:a.location_title,raion:a.location_raion,alert_type:a.alert_type}))
+  };
+}
 async function refreshStatus(){
   try{
     const sep=ALERT_PROXY_URL.includes('?')?'&':'?';
     const data=await fetchJson(ALERT_PROXY_URL+sep+'ts='+Date.now(),12000);
     setAlertPill(data);
   }catch{
+    try{
+      const cached=JSON.parse(localStorage.getItem(ALERTS_CACHE_KEY)||'null');
+      if(Array.isArray(cached?.alerts)){
+        setAlertPill(clientKyivStatus(cached.alerts,cached.updated_at));
+        $('alertPillText').textContent=($('alertPillText').textContent||'Київська область')+' · кеш';
+        return;
+      }
+    }catch{}
     $('alertPill').className='alert-pill state-unknown';
     $('alertPillTitle').textContent='Статус недоступний';
     $('alertPillText').textContent='Оновлю автоматично';
@@ -702,6 +722,8 @@ window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();deferredPro
 if('serviceWorker' in navigator)navigator.serviceWorker.register('./sw.js').catch(()=>{});
 
 setMapStyle(mapStyle);
+const initialTab=new URLSearchParams(location.search).get('tab');
+if(['map','list','alerts'].includes(initialTab))switchTab(initialTab);
 $('alertsOverlayToggle').classList.toggle('on',alertOverlayEnabled);
 $('alertsOverlayToggle').setAttribute('aria-pressed',String(alertOverlayEnabled));
 loadShelters();
