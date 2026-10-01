@@ -27,11 +27,11 @@ let currentTab='map',deferredPrompt=null;
 const favorites=new Set(JSON.parse(localStorage.getItem(FAV_KEY)||'[]'));
 
 const baseLayers={
-  clean:L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',{
-    maxZoom:20,subdomains:'abcd',attribution:'© OpenStreetMap © CARTO'
+  clean:L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}',{
+    maxZoom:16,attribution:'Tiles © Esri'
   }),
-  standard:L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',{
-    maxZoom:20,subdomains:'abcd',attribution:'© OpenStreetMap © CARTO'
+  standard:L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',{
+    maxZoom:19,attribution:'Tiles © Esri'
   }),
   satellite:L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{
     maxZoom:19,attribution:'Tiles © Esri'
