@@ -29,13 +29,13 @@ function formatTime(v){if(!v)return'';try{return new Date(v).toLocaleTimeString(
 function markerIcon(source){return L.divIcon({className:'',html:`<div class="marker-dot ${source==='kyiv_official'?'marker-official':'marker-osm'}"></div>`,iconSize:[17,17],iconAnchor:[8,8]})}
 async function fetchJson(url, timeout=65000){const c=new AbortController(),t=setTimeout(()=>c.abort(),timeout);try{const r=await fetch(url,{signal:c.signal,cache:'no-store'});if(!r.ok)throw new Error(String(r.status));return await r.json()}finally{clearTimeout(t)}}
 
-function sourceLabel(s){return s.source==='kyiv_official'?'Офіційні дані Києва':'OpenStreetMap · Київська область'}
+function sourceLabel(s){return s.source==='kyiv_official'?'КМДА · офіційні дані':'ДСНС · офіційний реєстр'}
 function typeLabel(s){return s.type==='simple'?'Найпростіше укриття':'Укриття / сховище'}
 
 function applyFilter(){
   const q=norm($('search').value.trim());
   filtered=shelters.filter(s=>{
-    if(activeFilter==='oblast'&&s.source!=='osm')return false;
+    if(activeFilter==='oblast'&&s.source!=='dsns')return false;
     if(activeFilter==='kyiv'&&s.source!=='kyiv_official')return false;
     if(activeFilter==='accessible'&&!s.accessible)return false;
     if(activeFilter==='favorites'&&!favorites.has(s.id))return false;
@@ -72,7 +72,7 @@ function renderShelterList(){
         <span class="list-main"><b>${fav}${esc(s.name)}</b><small>${esc(s.address)}</small></span>
         ${d}
       </div>
-      <div class="mini-tags"><span class="mini-tag ${s.source==='kyiv_official'?'official':''}">${s.source==='kyiv_official'?'Київ · офіційне':'Область · OSM'}</span>${s.accessible?'<span class="mini-tag">♿ доступність</span>':''}</div>
+      <div class="mini-tags"><span class="mini-tag ${s.source==='kyiv_official'?'official':''}">${s.source==='kyiv_official'?'Київ · КМДА':'Область · ДСНС'}</span>${s.accessible?'<span class="mini-tag">♿ доступність</span>':''}</div>
     </button>`;
   }).join('') || '<div class="empty-state">За цим пошуком нічого не знайдено</div>';
 
@@ -252,7 +252,7 @@ async function loadShelters(){
     shelters=Array.isArray(data.shelters)?data.shelters:[];
     localStorage.setItem(CACHE_KEY,JSON.stringify({shelters,updated_at:data.updated_at}));
     applyFilter();
-    const a=data.counts?.kyiv_official||0,b=data.counts?.oblast_osm||0;
+    const a=data.counts?.kyiv_official||0,b=data.counts?.oblast_dsns||data.counts?.dsns||0;
     $('dataBadge').textContent=shelters.length+' точок · Київ '+a+' · область '+b+(data.partial?' · частково':'');
   }catch{
     $('dataBadge').textContent=shelters.length?shelters.length+' точок · офлайн-кеш':'Не вдалося завантажити укриття';
