@@ -124,7 +124,7 @@ function summarizeKyiv(alerts) {
 
 async function getShelters(force = false) {
   const cache = caches.default;
-  const key = new Request("https://cache.bespeka.local/shelters-v3");
+  const key = new Request("https://cache.bespeka.local/shelters-v4");
   if (!force) {
     const cached = await cache.match(key);
     if (cached) return await cached.json();
