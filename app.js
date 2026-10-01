@@ -64,7 +64,8 @@ function renderShelterList(){
   $('listCount').textContent=list.length+' укриттів';
   $('listHint').textContent=userPos?'За відстанню від вас':'Київ та Київська область';
 
-  $('shelterList').innerHTML=list.map(s=>{
+  const shown=list.slice(0,listLimit);
+  $('shelterList').innerHTML=shown.map(s=>{
     const d=userPos?`<span class="distance">${formatDist(distance(userPos,s))}</span>`:'';
     const fav=favorites.has(s.id)?'★ ':'';
     return `<button class="list-item" data-id="${esc(s.id)}">
@@ -77,10 +78,16 @@ function renderShelterList(){
     </button>`;
   }).join('') || '<div class="empty-state">За цим пошуком нічого не знайдено</div>';
 
+  if(list.length>shown.length){
+    $('shelterList').insertAdjacentHTML('beforeend',`<button id="loadMore" class="load-more">Показати ще · ${list.length-shown.length}</button>`);
+  }
+
   document.querySelectorAll('.list-item').forEach(el=>el.onclick=()=>{
     const s=shelters.find(x=>x.id===el.dataset.id);
     if(s) openShelter(s);
   });
+  const more=$('loadMore');
+  if(more)more.onclick=()=>{listLimit+=250;renderShelterList()};
 }
 
 function updateNearest(){
