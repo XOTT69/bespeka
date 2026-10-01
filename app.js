@@ -9,7 +9,7 @@ const FAV_KEY = 'bespeka-favorites-v1';
 const $ = id => document.getElementById(id);
 const favorites = new Set(JSON.parse(localStorage.getItem(FAV_KEY) || '[]'));
 let shelters = [], filtered = [], activeFilter = 'all', userPos = null, userMarker = null, nearestShelter = null;
-let currentTab = 'map', deferredPrompt = null, alerts = [], alertGeoLayer = null, alertsLoaded = false;
+let currentTab = 'map', deferredPrompt = null, alerts = [], alertGeoLayer = null, alertsLoaded = false, kyivAlertMarker = null;
 
 const map = L.map('map', { zoomControl: true }).setView([50.36, 30.43], 9);
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(map);
@@ -198,15 +198,35 @@ async function renderAlertMap(){
       });
     }
   }).addTo(alertsMap);
+  kyivAlertMarker=L.circleMarker([50.4501,30.5234],{radius:6,color:'#ffffff',weight:1,fillColor:'#18263a',fillOpacity:.9}).addTo(alertsMap);
+  kyivAlertMarker.on('click',()=>{
+    const items=alerts.filter(a=>a.location_title==='м. Київ'||a.location_oblast==='м. Київ');
+    const msg=items.length?items.map(x=>alertTypeLabel(x.alert_type)).filter(Boolean).join(' · '):'Активних тривог немає';
+    kyivAlertMarker.bindPopup('<b>м. Київ</b><br>'+esc(msg)).openPopup();
+  });
+  styleKyivMarker();
   try{alertsMap.fitBounds(alertGeoLayer.getBounds(),{padding:[4,4]})}catch{}
 }
 function alertRegionStyle(name){
   const items=oblastAlerts(name);
   const active=items.length>0;
   const yellow=items.length&&items.every(x=>x.alert_level==='yellow');
-  return {color:active?(yellow?'#e8bc4f':'#ff5967'):'#52627a',weight:1,fillColor:active?(yellow?'#e8bc4f':'#ff5967'):'#18263a',fillOpacity:active?.62:.22};
+  return {color:active?(yellow?'#e8bc4f':'#ff5967'):'#52627a',weight:1,fillColor:active?(yellow?'#e8bc4f':'#ff5967'):'#18263a',fillOpacity:active ? .62 : .22};
 }
-function styleAlertMap(){if(alertGeoLayer)alertGeoLayer.eachLayer(layer=>layer.setStyle(alertRegionStyle(layer.feature?.properties?.name)))}
+function styleKyivMarker(){
+  if(!kyivAlertMarker)return;
+  const items=alerts.filter(a=>a.location_title==='м. Київ'||a.location_oblast==='м. Київ');
+  const yellow=items.length&&items.every(x=>x.alert_level==='yellow');
+  kyivAlertMarker.setStyle({
+    color:'#ffffff',
+    fillColor:items.length?(yellow?'#e8bc4f':'#ff5967'):'#18263a',
+    fillOpacity:items.length?1:.9
+  });
+}
+function styleAlertMap(){
+  if(alertGeoLayer)alertGeoLayer.eachLayer(layer=>layer.setStyle(alertRegionStyle(layer.feature?.properties?.name)));
+  styleKyivMarker();
+}
 
 async function loadShelters(){
   const cached=JSON.parse(localStorage.getItem(CACHE_KEY)||'null');
