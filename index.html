@@ -18,13 +18,15 @@
 <body>
   <div id="map" aria-label="Карта укриттів Київської області"></div>
 
+  <div id="alertBanner" class="alert-banner alert-unknown">
+    <div><strong id="alertTitle">Тривоги</strong><span id="alertText">API ще не підключено</span></div>
+    <span id="alertDot" class="alert-dot"></span>
+  </div>
+
   <header class="topbar">
     <div class="brand">
       <span class="shield">🛡️</span>
-      <div>
-        <strong>Безпека</strong>
-        <small>Укриття Києва та області</small>
-      </div>
+      <div><strong>Безпека</strong><small>Укриття Києва та області</small></div>
     </div>
     <button id="installBtn" class="icon-btn hidden" title="Встановити застосунок">＋</button>
   </header>
@@ -40,8 +42,14 @@
       <button class="chip" data-filter="shelter">Сховища</button>
       <button class="chip" data-filter="simple">Найпростіші</button>
       <button class="chip" data-filter="accessible">♿ Доступні</button>
+      <button class="chip" data-filter="favorites">★ Обрані</button>
     </div>
   </section>
+
+  <div id="nearestCard" class="nearest-card hidden">
+    <div><small>Найближче укриття</small><strong id="nearestName">—</strong><span id="nearestMeta">—</span></div>
+    <button id="nearestGo">Відкрити</button>
+  </div>
 
   <div id="status" class="status">Завантажую укриття…</div>
 
@@ -55,10 +63,7 @@
 
   <section id="listPanel" class="list-panel">
     <div class="list-head">
-      <div>
-        <strong>Найближчі укриття</strong>
-        <small id="listHint">Натисни ⌖, щоб сортувати за відстанню</small>
-      </div>
+      <div><strong>Найближчі укриття</strong><small id="listHint">Натисни ⌖, щоб сортувати за відстанню</small></div>
       <button id="closeList" class="close-btn">×</button>
     </div>
     <div id="shelterList" class="shelter-list"></div>
@@ -66,6 +71,7 @@
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
   <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+  <script src="./alert-config.js"></script>
   <script src="./app.js"></script>
 </body>
 </html>
