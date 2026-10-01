@@ -17,13 +17,14 @@ const KYIV_DISTRICTS = [
 
 const CACHE_KEY='bespeka-shelters-v10';
 const FAV_KEY='bespeka-favorites-v1';
+const SEARCH_DELAY=160;
 const MAP_STYLE_KEY='bespeka-map-style-v2';
 const ALERT_OVERLAY_KEY='bespeka-alert-overlay-v1';
 const ALERTS_CACHE_KEY='bespeka-alerts-v1';
 const OVERPASS_ENDPOINTS=['https://overpass-api.de/api/interpreter','https://overpass.kumi.systems/api/interpreter'];
 const $=id=>document.getElementById(id);
 
-let shelters=[],filtered=[],activeFilter='all',searchQuery='',userPos=null,userMarker=null,nearestShelter=null,listLimit=250;
+let shelters=[],filtered=[],activeFilter='all',searchQuery='',userPos=null,userMarker=null,nearestShelter=null,listLimit=250,searchTimer=null;
 let alerts=[],alertScope='kyiv',alertMapLayer=null,alertMapLabels=[],alertOverlayLayer=null,alertOverlayLabels=[];
 let currentTab='map',deferredPrompt=null,map3d=null,map3dReady=false,active3dShelter=null;
 const favorites=new Set(JSON.parse(localStorage.getItem(FAV_KEY)||'[]'));
@@ -46,8 +47,8 @@ let mapStyle=localStorage.getItem(MAP_STYLE_KEY)||'classic';
 let alertOverlayEnabled=localStorage.getItem(ALERT_OVERLAY_KEY)==='1';
 
 const map=L.map('map',{zoomControl:true,preferCanvas:true}).setView([50.35,30.42],9);
-(baseLayers[mapStyle]||baseLayers.clean).addTo(map);
-const clusters=L.markerClusterGroup({showCoverageOnHover:false,maxClusterRadius:44,spiderfyOnMaxZoom:true});
+(baseLayers[mapStyle]||baseLayers.classic).addTo(map);
+const clusters=L.markerClusterGroup({showCoverageOnHover:false,maxClusterRadius:44,spiderfyOnMaxZoom:true,chunkedLoading:true,chunkInterval:80,chunkDelay:18,removeOutsideVisibleBounds:true});
 map.addLayer(clusters);
 
 const alertsMap=L.map('alertsMap',{zoomControl:false,attributionControl:false,preferCanvas:true,minZoom:4,maxZoom:11}).setView([48.8,31.2],5);
@@ -106,7 +107,8 @@ function setSearch(v){
   searchQuery=v;
   if($('mapSearch').value!==v)$('mapSearch').value=v;
   if($('listSearch').value!==v)$('listSearch').value=v;
-  applyFilter(false);
+  clearTimeout(searchTimer);
+  searchTimer=setTimeout(()=>applyFilter(false),SEARCH_DELAY);
 }
 function setFilter(f){
   activeFilter=f;
@@ -558,7 +560,7 @@ async function loadAlerts(){
   }catch{
     try{
       const cached=JSON.parse(localStorage.getItem(ALERTS_CACHE_KEY)||'null');
-      if(cached?.alerts?.length){
+      if(Array.isArray(cached?.alerts)){
         alerts=cached.alerts;
         $('alertsUpdated').textContent='Кеш · '+formatTime(cached.updated_at);
         renderThreats();
@@ -597,7 +599,7 @@ async function loadShelters(){
     localStorage.setItem(CACHE_KEY,JSON.stringify({shelters,updated_at:data.updated_at}));
     applyFilter(false);
     const city=data.counts?.kyiv_official||0,oblast=data.counts?.oblast_dsns||data.counts?.dsns||0;
-    $('dataBadge').textContent=shelters.length+' · Київ '+city+' · область '+oblast+(source==='snapshot'?' · резерв':'')+(data.partial?' · частково':'');
+    $('dataBadge').textContent=shelters.length+' · Київ '+city+' · область '+oblast+' · '+formatTime(data.updated_at)+(source==='snapshot'?' · резерв':'')+(data.partial?' · частково':'');
   }else{
     $('dataBadge').textContent=shelters.length?shelters.length+' точок · офлайн-кеш':'Укриття тимчасово недоступні';
   }
@@ -610,7 +612,10 @@ function switchTab(tab){
   $('listView').classList.toggle('active',tab==='list');
   $('alertsView').classList.toggle('active',tab==='alerts');
   setTimeout(()=>{
-    if(tab==='map')map.invalidateSize();
+    if(tab==='map'){
+      if(mapStyle==='3d'&&map3d)map3d.resize();
+      else map.invalidateSize();
+    }
     if(tab==='alerts'){alertsMap.invalidateSize();loadAlerts()}
   },60);
 }
