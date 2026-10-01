@@ -340,7 +340,7 @@ function first(p, ...keys) {
 function dedupe(items) {
   const seen = new Set(), out = [];
   for (const s of items) {
-    const key = Math.round(s.lat * 10000) + "|" + Math.round(s.lng * 10000);
+    const key = String(s.id || "") + "|" + String(s.source || "");
     if (seen.has(key)) continue;
     seen.add(key);
     out.push(s);
