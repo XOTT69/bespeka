@@ -1,3 +1,4 @@
+// bespeka worker v4 — official shelters + district alerts
 const KYIV_OFFICIAL = "https://gisserver.kyivcity.gov.ua/mayno/rest/services/KYIV_API/Public_protection/MapServer/0/query?where=1%3D1&outFields=*&returnGeometry=true&f=geojson&outSR=4326";
 const OVERPASS_ENDPOINTS = [
   "https://overpass-api.de/api/interpreter",
