@@ -9,7 +9,7 @@ const FAV_KEY = 'bespeka-favorites-v1';
 
 const $ = id => document.getElementById(id);
 const favorites = new Set(JSON.parse(localStorage.getItem(FAV_KEY) || '[]'));
-let shelters = [], filtered = [], activeFilter = 'all', userPos = null, userMarker = null, nearestShelter = null;
+let shelters = [], filtered = [], activeFilter = 'all', userPos = null, userMarker = null, nearestShelter = null, listLimit = 250;
 let currentTab = 'map', deferredPrompt = null, alerts = [], alertGeoLayer = null, alertsLoaded = false, alertScope = 'kyiv';
 
 const map = L.map('map', { zoomControl: true }).setView([50.36, 30.43], 9);
