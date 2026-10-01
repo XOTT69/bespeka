@@ -95,10 +95,6 @@ async function getStatus(env, force = false) {
     "Cache-Control": "public, max-age=45"
   });
 
-  ctxWait(cache.put(cacheKey, cachedResponse.clone()));
+  await cache.put(cacheKey, cachedResponse.clone());
   return result;
-}
-
-function ctxWait(promise) {
-  promise.catch(() => {});
 }
