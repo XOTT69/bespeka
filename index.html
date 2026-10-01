@@ -13,6 +13,7 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
   <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css">
   <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css">
+  <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.7.3/dist/maplibre-gl.css">
   <link rel="stylesheet" href="./styles.css">
 </head>
 <body>
@@ -30,6 +31,7 @@
   <main class="main">
     <section id="mapView" class="screen active">
       <div id="map" class="map"></div>
+      <div id="map3d" class="map map-3d hidden" aria-label="3D карта укриттів"></div>
 
       <div class="map-search glass">
         <input id="mapSearch" type="search" placeholder="Адреса, населений пункт, укриття…" autocomplete="off">
@@ -121,10 +123,12 @@
   <div class="setting-block">
     <small>Вигляд карти</small>
     <div class="map-style-grid">
-      <button class="map-style active" data-map-style="clean"><span class="preview clean"></span><b>Чиста</b></button>
-      <button class="map-style" data-map-style="standard"><span class="preview standard"></span><b>Стандарт</b></button>
+      <button class="map-style active" data-map-style="classic"><span class="preview classic"></span><b>Класична</b></button>
+      <button class="map-style" data-map-style="clean"><span class="preview clean"></span><b>Чиста</b></button>
       <button class="map-style" data-map-style="satellite"><span class="preview satellite"></span><b>Супутник</b></button>
+      <button class="map-style" data-map-style="3d"><span class="preview three-d"><i>3D</i></span><b>Безпека 3D</b></button>
     </div>
+    <p class="map-style-note">3D показує обʼєм будинків і позначені в OpenStreetMap входи біля вибраного укриття. Карту можна нахиляти й обертати двома пальцями.</p>
   </div>
 
   <div class="setting-row">
@@ -135,6 +139,7 @@
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
 <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+<script src="https://unpkg.com/maplibre-gl@5.7.3/dist/maplibre-gl.js"></script>
 <script src="./alert-config.js"></script>
 <script src="./app.js"></script>
 </body>
