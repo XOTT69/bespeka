@@ -268,6 +268,20 @@ function add3dLayers(){
     map3d.on('mouseenter','bespeka-shelters',()=>map3d.getCanvas().style.cursor='pointer');
     map3d.on('mouseleave','bespeka-shelters',()=>map3d.getCanvas().style.cursor='');
   }
+  if(!map3d.getSource('bespeka-selected')){
+    map3d.addSource('bespeka-selected',{type:'geojson',data:emptyGeoJson()});
+    map3d.addLayer({
+      id:'bespeka-selected-halo',
+      type:'circle',
+      source:'bespeka-selected',
+      paint:{
+        'circle-radius':['interpolate',['linear'],['zoom'],15,13,19,24],
+        'circle-color':'rgba(103,174,252,.12)',
+        'circle-stroke-color':'#b9ddff',
+        'circle-stroke-width':2.5
+      }
+    });
+  }
   if(!map3d.getSource('bespeka-entrances')){
     map3d.addSource('bespeka-entrances',{type:'geojson',data:emptyGeoJson()});
     map3d.addLayer({
@@ -314,6 +328,8 @@ function render3dShelters(){
   add3dLayers();
   const src=map3d.getSource('bespeka-shelters');
   if(src)src.setData(shelterGeoJson());
+  const selected=map3d.getSource('bespeka-selected');
+  if(selected)selected.setData(active3dShelter?{type:'FeatureCollection',features:[{type:'Feature',geometry:{type:'Point',coordinates:[active3dShelter.lng,active3dShelter.lat]},properties:{}}]}:emptyGeoJson());
 }
 async function loadMappedEntrances(s){
   if(!map3d||!map3dReady)return;
