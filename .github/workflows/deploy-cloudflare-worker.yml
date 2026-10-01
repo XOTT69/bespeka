@@ -56,28 +56,33 @@ jobs:
         env:
           WORKER_URL: ${{ steps.deploy.outputs.worker_url }}
         run: |
-          curl --fail --silent --show-error --retry 2 --max-time 120 "${WORKER_URL}/shelters" -o shelter-health-source.json
+          set +e
+          HTTP_CODE=$(curl --silent --show-error --retry 1 --max-time 150 -w "%{http_code}" "${WORKER_URL}/shelters" -o shelter-health-source.json)
+          CURL_EXIT=$?
+          export HTTP_CODE CURL_EXIT
           node - <<'NODE'
           const fs = require('fs');
-          const d = JSON.parse(fs.readFileSync('shelter-health-source.json','utf8'));
-          if (!Array.isArray(d.shelters) || d.shelters.length === 0) {
-            throw new Error('Shelter API returned no shelters');
-          }
-          const oblast = Number(d.counts?.oblast_dsns || d.counts?.dsns || 0);
-          if (oblast <= 0) {
-            throw new Error('DSNS returned no Kyiv Oblast shelters');
-          }
+          let raw = '';
+          try { raw = fs.readFileSync('shelter-health-source.json','utf8'); } catch {}
+          let d = null;
+          try { d = JSON.parse(raw); } catch {}
           const health = {
-            ok: true,
-            total: d.shelters.length,
-            kyiv_official: Number(d.counts?.kyiv_official || 0),
-            oblast_dsns: oblast,
-            partial: Boolean(d.partial),
+            ok: false,
+            http_code: process.env.HTTP_CODE || null,
+            curl_exit: Number(process.env.CURL_EXIT || -1),
+            total: Array.isArray(d?.shelters) ? d.shelters.length : 0,
+            kyiv_official: Number(d?.counts?.kyiv_official || 0),
+            oblast_dsns: Number(d?.counts?.oblast_dsns || d?.counts?.dsns || 0),
+            partial: Boolean(d?.partial),
+            error: d?.error || null,
+            message: d?.message || null,
             checked_at: new Date().toISOString()
           };
+          health.ok = health.http_code === '200' && health.total > 0 && health.oblast_dsns > 0;
           fs.writeFileSync('data-health.json', JSON.stringify(health, null, 2) + '\n');
           console.log(health);
           NODE
+          rm -f shelter-health-source.json
 
       - name: Point PWA to Worker
         env:
