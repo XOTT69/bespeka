@@ -121,25 +121,39 @@ function summarizeKyiv(alerts) {
   };
 }
 
-async function getShelters() {
+async function getShelters(force = false) {
   const cache = caches.default;
-  const key = new Request("https://cache.bespeka.local/shelters-v2");
-  const cached = await cache.match(key);
-  if (cached) return await cached.json();
+  const key = new Request("https://cache.bespeka.local/shelters-v3");
+  if (!force) {
+    const cached = await cache.match(key);
+    if (cached) return await cached.json();
+  }
 
-  const [city, oblast] = await Promise.allSettled([fetchKyivOfficial(), fetchOblastOsm()]);
+  const [city, dsns] = await Promise.allSettled([fetchKyivOfficial(), fetchDsnsKyiv()]);
   const cityItems = city.status === "fulfilled" ? city.value : [];
-  const oblastItems = oblast.status === "fulfilled" ? oblast.value : [];
-  const shelters = dedupe([...cityItems, ...oblastItems]);
+  let dsnsItems = dsns.status === "fulfilled" ? dsns.value : [];
 
-  if (!shelters.length) throw new Error("No shelter source available");
+  // Prefer Kyiv's own frequently-updated municipal dataset for the city itself.
+  if (cityItems.length) {
+    dsnsItems = dsnsItems.filter(s => !isKyivCityName(s.region));
+  }
+
+  const shelters = dedupe([...cityItems, ...dsnsItems]);
+  if (!shelters.length) throw new Error("No official shelter source available");
 
   const payload = {
     shelters,
-    counts: { total: shelters.length, kyiv_official: cityItems.length, oblast_osm: oblastItems.length },
-    partial: city.status !== "fulfilled" || oblast.status !== "fulfilled",
+    counts: {
+      total: shelters.length,
+      kyiv_official: cityItems.length,
+      dsns: dsnsItems.length,
+      oblast_dsns: dsnsItems.filter(s => !isKyivCityName(s.region)).length
+    },
+    partial: city.status !== "fulfilled" || dsns.status !== "fulfilled",
+    sources: ["КМДА", "ДСНС"],
     updated_at: new Date().toISOString()
   };
+
   await cache.put(key, json(payload, 200, { "Cache-Control": "public, max-age=21600" }));
   return payload;
 }
@@ -152,34 +166,142 @@ async function fetchKyivOfficial() {
     if (f?.geometry?.type !== "Point") return null;
     const [lng, lat] = f.geometry.coordinates || [];
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
-    return normalizeShelter(f.properties || {}, lat, lng, "kyiv_official", "kyiv:" + (f.id || i));
+    const item = normalizeShelter(f.properties || {}, lat, lng, "kyiv_official", "kyiv:" + (f.id || i));
+    item.region = "м. Київ";
+    return item;
   }).filter(Boolean);
 }
 
-async function fetchOblastOsm() {
-  const query = `[out:json][timeout:55];area(${KYIV_OBLAST_AREA})->.a;(nwr["amenity"="shelter"](area.a);nwr["emergency"="shelter"](area.a);nwr["shelter_type"](area.a);nwr["military"="bunker"]["bunker_type"="civil_defense"](area.a););out center tags qt;`;
-  let lastError;
+async function fetchDsnsKyiv() {
+  const regionIds = await getDsnsKyivRegionIds();
+  const out = [];
+  const limit = 1000;
+  const maxPages = regionIds.length ? 8 : 25;
 
-  for (const endpoint of OVERPASS_ENDPOINTS) {
-    try {
-      const res = await fetch(endpoint, {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8" },
-        body: "data=" + encodeURIComponent(query)
+  for (let page = 0; page < maxPages; page++) {
+    const body = {
+      search: "",
+      versiyaId: null,
+      yeVyklyuchenoyu: null,
+      format: "json",
+      sortBy: "",
+      sortOrder: "",
+      dataProvedennyaOtsinkyStanuHotovnosti: "",
+      formaVlasnostiId: [],
+      isMinimumInfo: false,
+      katehoriyaNaselennyaId: [],
+      limit,
+      maxMistkist: null,
+      maxPloshcha: null,
+      maxRikVvedennyaVEkspluatatsiyu: null,
+      minMistkist: null,
+      minPloshcha: null,
+      minRikVvedennyaVEkspluatatsiyu: null,
+      nayavniZasobyZvyazkuId: [],
+      nayavnistDostupuMalomobilnykhVerstvNaselennya: null,
+      nayavnistYERODV: null,
+      nazvaBalansoutrymuvacha: "",
+      nazvaNaselenohoPunktuId: [],
+      nazvaRayonuMistaId: [],
+      nebezpechniZonyId: [],
+      oblikovyyNomerMistyt: "",
+      osnovnyjVydEkonDiyalnostiId: [],
+      rayonId: [],
+      rehionId: regionIds,
+      reyestrovyyNomerSporudy: "",
+      rezhymyFiltroventylyatsiyiId: [],
+      searchOnlyFields: [],
+      skip: page * limit,
+      stanHotovnostiId: [],
+      statusProvedennyaInventaryzatsiyi: null,
+      terytorialnaHromadaId: [],
+      typSporudyId: [],
+      vydSporudyId: [],
+      yurydychnaAdresaBalansoutrymuvacha: "",
+      zakhysniVlastyvostiId: []
+    };
+
+    const res = await fetch("https://shelters.dsns.gov.ua/api/v1/public/ukryttya/get", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body)
+    });
+    if (!res.ok) throw new Error(`DSNS shelters HTTP ${res.status}`);
+
+    const payload = await res.json();
+    const items = Array.isArray(payload?.data?.items) ? payload.data.items : [];
+    if (!items.length) break;
+
+    for (const x of items) {
+      if (x?.yeVyklyuchenoyu === true) continue;
+      const region = nestedName(x?.Rehion);
+      if (!regionIds.length && !isKyivRegionName(region)) continue;
+
+      const lat = Number(x?.shyrota);
+      const lng = Number(x?.dovhota);
+      if (!Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) continue;
+
+      const place = nestedName(x?.NazvaNaselenohoPunktu);
+      const address = [place, x?.nazvaVulytsi, x?.inshiRekvizytyAdresy].filter(Boolean).join(", ") || "Адресу не вказано";
+      const kind = nestedName(x?.VydSporudy) || nestedName(x?.TypSporudy) || x?.imya || x?.naimenuvanniaMistsiaDliaUkryttia || "Укриття";
+      const ready = nestedName(x?.StanHotovnosti);
+      const accessValue = x?.nayavnistDostupuMalomobilnykhVerstvNaselennya;
+      const accessible = accessValue === true || /так|yes|наяв|доступ/i.test(String(accessValue || ""));
+
+      out.push({
+        id: "dsns:" + String(x?.id ?? x?.oblikovyyNomer ?? lat + "," + lng),
+        lat, lng,
+        source: "dsns",
+        type: /найпрост/i.test(kind) ? "simple" : "shelter",
+        name: x?.naimenuvanniaMistsiaDliaUkryttia || kind,
+        address,
+        city: place,
+        region,
+        district: nestedName(x?.Rayon),
+        community: nestedName(x?.TerytorialnaHromada),
+        accessible,
+        hours: "",
+        photo: "",
+        capacity: x?.mistkistOsib ?? "",
+        readiness: ready,
+        registry_number: x?.oblikovyyNomer || "",
+        updated_at: x?.updatedAt || null
       });
-      if (!res.ok) throw new Error(`Overpass HTTP ${res.status}`);
-      const data = await res.json();
-      return (data.elements || []).map(e => {
-        const lat = e.lat ?? e.center?.lat;
-        const lng = e.lon ?? e.center?.lon;
-        if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
-        return normalizeShelter(e.tags || {}, lat, lng, "osm", `osm:${e.type}:${e.id}`);
-      }).filter(Boolean);
-    } catch (e) {
-      lastError = e;
     }
+
+    if (items.length < limit) break;
   }
-  throw lastError || new Error("Overpass unavailable");
+
+  return out;
+}
+
+async function getDsnsKyivRegionIds() {
+  try {
+    const res = await fetch("https://shelters.dsns.gov.ua/api/v1/public/katootth/regions");
+    if (!res.ok) return [];
+    const raw = await res.json();
+    const list = Array.isArray(raw) ? raw : Array.isArray(raw?.data) ? raw.data : [];
+    return list
+      .filter(r => isKyivRegionName(String(r?.name || r?.nazva || r?.imya || "")))
+      .map(r => r?.id)
+      .filter(v => v !== undefined && v !== null);
+  } catch {
+    return [];
+  }
+}
+
+function nestedName(v) {
+  return String(v?.imya || v?.name || v?.nazva || "").trim();
+}
+
+function isKyivRegionName(name) {
+  const n = String(name || "").toLowerCase().replace(/’/g, "'");
+  return n.includes("київська") || n === "м. київ" || n === "київ" || n.includes("kyiv oblast") || n === "kyiv";
+}
+
+function isKyivCityName(name) {
+  const n = String(name || "").toLowerCase().trim();
+  return n === "м. київ" || n === "київ" || n === "kyiv";
 }
 
 function normalizeShelter(p, lat, lng, source, id) {
