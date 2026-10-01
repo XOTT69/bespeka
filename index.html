@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-  <meta name="theme-color" content="#0b1220">
+  <meta name="theme-color" content="#0a1220">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Безпека">
@@ -16,84 +16,126 @@
   <link rel="stylesheet" href="./styles.css">
 </head>
 <body>
-  <div class="app-shell">
-    <header class="app-header">
-      <div class="brand-row">
-        <div class="brand"><span class="brand-icon">🛡️</span><div><strong>Безпека</strong><small>Київ та Київська область</small></div></div>
-        <button id="installBtn" class="round-btn hidden" aria-label="Встановити">＋</button>
-      </div>
-      <button id="alertBanner" class="alert-banner alert-unknown" data-tab="alerts">
-        <span class="alert-dot"></span>
-        <span class="alert-copy"><strong id="alertTitle">Перевіряю тривоги…</strong><small id="alertText">Київська область</small></span>
-        <span class="chevron">›</span>
-      </button>
-    </header>
+<div id="app">
+  <header class="appbar">
+    <div class="app-id">
+      <span class="logo">🛡️</span>
+      <div><strong>Безпека</strong><small>Київщина</small></div>
+    </div>
+    <button id="alertPill" class="alert-pill state-unknown">
+      <i></i><span><b id="alertPillTitle">Перевіряю тривоги</b><small id="alertPillText">Київська область</small></span>
+    </button>
+  </header>
 
-    <section id="shelterControls" class="shelter-controls">
-      <div class="search-row">
-        <input id="search" type="search" placeholder="Знайти адресу або населений пункт" autocomplete="off">
-        <button id="locateBtn" class="locate-btn" aria-label="Моє місцезнаходження">⌖</button>
+  <main class="main">
+    <section id="mapView" class="screen active">
+      <div id="map" class="map"></div>
+
+      <div class="map-search glass">
+        <input id="mapSearch" type="search" placeholder="Адреса, населений пункт, укриття…" autocomplete="off">
+        <button id="locateBtn" class="icon-action" title="Моя геопозиція">⌖</button>
       </div>
-      <div class="chips">
-        <button class="chip active" data-filter="all">Усі</button>
-        <button class="chip" data-filter="oblast">Область</button>
-        <button class="chip" data-filter="kyiv">Київ</button>
-        <button class="chip" data-filter="accessible">♿ Доступні</button>
-        <button class="chip" data-filter="favorites">★ Обрані</button>
+
+      <div class="map-filter-row">
+        <button class="filter-chip active" data-filter="all">Усі</button>
+        <button class="filter-chip" data-filter="oblast">Область</button>
+        <button class="filter-chip" data-filter="kyiv">Київ</button>
+        <button class="filter-chip" data-filter="accessible">♿</button>
+        <button class="filter-chip" data-filter="favorites">★</button>
       </div>
+
+      <div class="map-tools">
+        <button id="layersBtn" class="tool-btn" title="Шари та вигляд карти">◫</button>
+        <button id="fitBtn" class="tool-btn" title="Показати Київщину">◎</button>
+      </div>
+
+      <div id="dataBadge" class="data-badge glass">Завантажую укриття…</div>
+
+      <button id="nearestCard" class="nearest-card glass hidden">
+        <span class="near-icon">⌖</span>
+        <span class="near-text"><small>Найближче укриття</small><b id="nearestName">—</b><span id="nearestMeta">—</span></span>
+        <span class="arrow">›</span>
+      </button>
     </section>
 
-    <main class="views">
-      <section id="mapView" class="view active">
-        <div id="map"></div>
-        <div id="dataBadge" class="data-badge">Завантажую укриття…</div>
-        <button id="nearestCard" class="nearest-card hidden">
-          <span class="nearest-icon">⌖</span>
-          <span class="nearest-copy"><small>Найближче укриття</small><strong id="nearestName">—</strong><span id="nearestMeta">—</span></span>
-          <span class="chevron">›</span>
-        </button>
-      </section>
-
-      <section id="listView" class="view list-view">
-        <div class="list-summary">
-          <strong id="listCount">Укриття</strong>
-          <small id="listHint">Усі доступні точки</small>
+    <section id="listView" class="screen list-screen">
+      <div class="list-top">
+        <div class="list-title"><div><strong>Укриття</strong><small id="listSubtitle">Київ та область</small></div><span id="listCount">0</span></div>
+        <div class="list-search"><input id="listSearch" type="search" placeholder="Пошук по списку…" autocomplete="off"></div>
+        <div class="list-filters">
+          <button class="filter-chip active" data-filter="all">Усі</button>
+          <button class="filter-chip" data-filter="oblast">Область</button>
+          <button class="filter-chip" data-filter="kyiv">Київ</button>
+          <button class="filter-chip" data-filter="accessible">♿ Доступні</button>
+          <button class="filter-chip" data-filter="favorites">★ Обрані</button>
         </div>
-        <div id="shelterList" class="shelter-list"></div>
-      </section>
+      </div>
+      <div id="shelterList" class="shelter-list"></div>
+    </section>
 
-      <section id="alertsView" class="view alerts-view">
-        <div class="alerts-scope">
+    <section id="alertsView" class="screen alerts-screen">
+      <div id="alertsMap" class="alerts-map"></div>
+
+      <div class="alerts-topbar glass">
+        <div class="segment">
           <button class="scope-btn active" data-alert-scope="kyiv">Київщина</button>
           <button class="scope-btn" data-alert-scope="ukraine">Україна</button>
         </div>
-        <div class="alerts-map-wrap">
-          <div id="alertsMap"></div>
-          <div class="alerts-legend"><span><i class="dot red"></i> Тривога</span><span><i class="dot yellow"></i> Часткова/жовта</span></div>
-        </div>
-        <div class="threats-panel">
-          <div class="section-title"><div><strong id="threatsTitle">Тривоги по районах</strong><small id="alertsUpdated">Оновлюю…</small></div><span id="activeRegionsCount" class="count-pill">0</span></div>
-          <div id="threatList" class="threat-list"></div>
-        </div>
-      </section>
-    </main>
+        <span id="alertsUpdated">Оновлюю…</span>
+      </div>
 
-    <nav class="bottom-nav" aria-label="Навігація">
-      <button class="nav-btn active" data-tab="map"><span>⌖</span><small>Укриття</small></button>
-      <button class="nav-btn" data-tab="list"><span>☰</span><small>Список</small></button>
-      <button class="nav-btn" data-tab="alerts"><span>⚠</span><small>Тривоги</small></button>
-    </nav>
+      <div class="alert-legend glass">
+        <span><i class="legend-dot red"></i>Червона</span>
+        <span><i class="legend-dot yellow"></i>Жовта</span>
+        <span><i class="legend-dot safe"></i>Немає</span>
+      </div>
+
+      <section class="alerts-drawer">
+        <div class="drawer-head">
+          <div><strong id="threatsTitle">Райони Київщини</strong><small id="alertsSummary">Статус по районах</small></div>
+          <span id="activeRegionsCount" class="counter">0</span>
+        </div>
+        <div id="threatList" class="threat-list"></div>
+      </section>
+    </section>
+  </main>
+
+  <nav class="tabbar">
+    <button class="tab active" data-tab="map"><span>⌖</span><small>Карта</small></button>
+    <button class="tab" data-tab="list"><span>☰</span><small>Укриття</small></button>
+    <button class="tab" data-tab="alerts"><span>⚠</span><small>Тривоги</small></button>
+  </nav>
+</div>
+
+<aside id="detailsSheet" class="sheet">
+  <div class="handle"></div>
+  <button id="closeDetails" class="sheet-close">×</button>
+  <div id="detailsContent"></div>
+</aside>
+
+<aside id="layersSheet" class="sheet compact-sheet">
+  <div class="handle"></div>
+  <button id="closeLayers" class="sheet-close">×</button>
+  <h3>Карта і шари</h3>
+
+  <div class="setting-block">
+    <small>Вигляд карти</small>
+    <div class="map-style-grid">
+      <button class="map-style active" data-map-style="clean"><span class="preview clean"></span><b>Чиста</b></button>
+      <button class="map-style" data-map-style="standard"><span class="preview standard"></span><b>Стандарт</b></button>
+      <button class="map-style" data-map-style="satellite"><span class="preview satellite"></span><b>Супутник</b></button>
+    </div>
   </div>
 
-  <aside id="sheet" class="sheet">
-    <div class="sheet-handle"></div>
-    <button id="closeSheet" class="close-btn" aria-label="Закрити">×</button>
-    <div id="sheetContent"></div>
-  </aside>
+  <div class="setting-row">
+    <span><b>Тривоги на карті</b><small>Підсвітити райони поверх укриттів</small></span>
+    <button id="alertsOverlayToggle" class="switch" aria-pressed="false"><i></i></button>
+  </div>
+</aside>
 
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
-  <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
-  <script src="./alert-config.js"></script>
-  <script src="./app.js"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+<script src="./alert-config.js"></script>
+<script src="./app.js"></script>
 </body>
 </html>
