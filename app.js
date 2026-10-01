@@ -671,27 +671,28 @@ document.querySelectorAll('.scope-btn').forEach(b=>b.onclick=async()=>{
   await renderAlertMap();
 });
 
-$('locateBtn').onclick=()=>{
-  if(!navigator.geolocation)return;
+function locateUser({openNearest=false}={}){
+  if(!navigator.geolocation){$('dataBadge').textContent='Геопозиція недоступна';return}
   $('dataBadge').textContent='Визначаю геопозицію…';
   navigator.geolocation.getCurrentPosition(p=>{
     userPos={lat:p.coords.latitude,lng:p.coords.longitude};
     if(userMarker)map.removeLayer(userMarker);
     userMarker=L.circleMarker([userPos.lat,userPos.lng],{radius:7,color:'#fff',weight:3,fillColor:'#f2c94c',fillOpacity:1}).addTo(map).bindPopup('Ви тут');
-    if(mapStyle==='3d'&&map3d){
+    applyFilter(false);
+    updateNearest();
+    if(openNearest&&nearestShelter){
+      openShelter(nearestShelter);
+      focusShelter(nearestShelter,17);
+    }else if(mapStyle==='3d'&&map3d){
       map3d.flyTo({center:[userPos.lng,userPos.lat],zoom:17.3,pitch:65,bearing:-18,duration:800});
     }else map.setView([userPos.lat,userPos.lng],14);
-    applyFilter(false);
     $('dataBadge').textContent=shelters.length+' укриттів';
-  },()=>{$('dataBadge').textContent='Геопозицію не отримано'},{enableHighAccuracy:true,timeout:12000});
-};
+  },()=>{$('dataBadge').textContent='Геопозицію не отримано'},{enableHighAccuracy:true,timeout:12000,maximumAge:30000});
+}
+$('locateBtn').onclick=()=>locateUser();
 $('fitBtn').onclick=fitKyiv;
 $('nearestCard').onclick=()=>{if(nearestShelter){openShelter(nearestShelter);focusShelter(nearestShelter,17)}};
-$('alertShelterBtn').onclick=()=>{
-  switchTab('map');
-  if(userPos&&nearestShelter){openShelter(nearestShelter);focusShelter(nearestShelter,17)}
-  else $('locateBtn').click();
-};
+$('alertShelterBtn').onclick=()=>{switchTab('map');locateUser({openNearest:true})};
 
 $('district3dBtn').onclick=()=>{
   if(!map3d)return;
