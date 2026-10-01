@@ -736,7 +736,18 @@ $('alertsOverlayToggle').onclick=async()=>{
 };
 
 window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();deferredPrompt=e});
-if('serviceWorker' in navigator)navigator.serviceWorker.register('./sw.js').catch(()=>{});
+if('serviceWorker' in navigator){
+  let swReloading=false;
+  navigator.serviceWorker.addEventListener('controllerchange',()=>{
+    if(swReloading)return;
+    swReloading=true;
+    location.reload();
+  });
+  navigator.serviceWorker.register('./sw.js',{updateViaCache:'none'}).then(reg=>{
+    reg.update().catch(()=>{});
+    document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')reg.update().catch(()=>{})});
+  }).catch(()=>{});
+}
 
 setMapStyle(mapStyle);
 const initialTab=new URLSearchParams(location.search).get('tab');
