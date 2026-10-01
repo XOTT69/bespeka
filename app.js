@@ -33,6 +33,7 @@ function sourceLabel(s){return s.source==='kyiv_official'?'КМДА · офіц�
 function typeLabel(s){return s.type==='simple'?'Найпростіше укриття':'Укриття / сховище'}
 
 function applyFilter(){
+  listLimit = 250;
   const q=norm($('search').value.trim());
   filtered=shelters.filter(s=>{
     if(activeFilter==='oblast'&&s.source!=='dsns')return false;
