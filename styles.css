@@ -50,3 +50,15 @@ button,input{font:inherit}.hidden{display:none!important}.glass{background:var(-
 #map3d .maplibregl-ctrl-group button span{filter:invert(1)}
 #map3d .maplibregl-popup-content{background:#111d31;color:white;border-radius:12px;padding:9px 11px}
 #map3d .maplibregl-popup-tip{border-top-color:#111d31}
+
+
+/* Usability pass */
+.map3d-hud{position:absolute;z-index:760;left:50%;top:108px;transform:translateX(-50%);display:flex;gap:3px;padding:3px;border-radius:12px}
+.hud-btn{border:0;background:transparent;color:#aebed0;border-radius:9px;padding:7px 9px;font-size:9px;font-weight:800;white-space:nowrap}
+.hud-btn.active{background:#dcecff;color:#0c1b2d}
+.map-actions{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:7px}
+.map-actions .walk3d-btn{margin-top:0}
+.show-map-btn{width:100%;border:1px solid var(--line);background:var(--panel2);color:#fff;border-radius:12px;padding:10px;font-size:10px;font-weight:800}
+.drawer-actions{display:flex;align-items:center;gap:6px}
+.alert-shelter-btn{border:1px solid rgba(103,174,252,.2);background:rgba(103,174,252,.1);color:#cfe5ff;border-radius:999px;padding:6px 8px;font-size:8px;font-weight:800;white-space:nowrap}
+@media(max-width:420px){.map3d-hud{top:105px}.hud-btn{padding:6px 8px}}
