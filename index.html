@@ -63,12 +63,16 @@
       </section>
 
       <section id="alertsView" class="view alerts-view">
+        <div class="alerts-scope">
+          <button class="scope-btn active" data-alert-scope="kyiv">Київщина</button>
+          <button class="scope-btn" data-alert-scope="ukraine">Україна</button>
+        </div>
         <div class="alerts-map-wrap">
           <div id="alertsMap"></div>
           <div class="alerts-legend"><span><i class="dot red"></i> Тривога</span><span><i class="dot yellow"></i> Часткова/жовта</span></div>
         </div>
         <div class="threats-panel">
-          <div class="section-title"><div><strong>Активні загрози</strong><small id="alertsUpdated">Оновлюю…</small></div><span id="activeRegionsCount" class="count-pill">0</span></div>
+          <div class="section-title"><div><strong id="threatsTitle">Тривоги по районах</strong><small id="alertsUpdated">Оновлюю…</small></div><span id="activeRegionsCount" class="count-pill">0</span></div>
           <div id="threatList" class="threat-list"></div>
         </div>
       </section>
