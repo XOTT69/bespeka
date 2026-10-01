@@ -4,7 +4,7 @@ const OSM_AREA = 3600071248;
 const CACHE_KEY = 'bespeka-shelters-v4';
 const FAV_KEY = 'bespeka-favorites-v1';
 
-const ALERT_CONFIG = window.BESPEKA_ALERT_API || null;
+const ALERT_PROXY_URL = window.BESPEKA_ALERT_PROXY_URL || './alert-status.json';
 
 const map = L.map('map',{zoomControl:true}).setView([50.36,30.43],9);
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap contributors'}).addTo(map);
@@ -112,7 +112,8 @@ function setAlertState(active,text='',updatedAt=''){
 }
 async function refreshAlert(){
   try{
-    const data=await fetchJson('./alert-status.json?ts='+Date.now(),{},10000);
+    const sep=ALERT_PROXY_URL.includes('?')?'&':'?';
+    const data=await fetchJson(ALERT_PROXY_URL+sep+'ts='+Date.now(),{},10000);
     setAlertState(data.active===true,data.text||'Київська область',data.updated_at||'');
   }catch{
     setAlertState(null,'Статус тимчасово недоступний');
