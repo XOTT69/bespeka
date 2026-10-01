@@ -52,6 +52,33 @@ jobs:
           fi
           echo "worker_url=$WORKER_URL" >> "$GITHUB_OUTPUT"
 
+      - name: Verify shelter API
+        env:
+          WORKER_URL: ${{ steps.deploy.outputs.worker_url }}
+        run: |
+          curl --fail --silent --show-error --retry 2 --max-time 120 "${WORKER_URL}/shelters" -o shelter-health-source.json
+          node - <<'NODE'
+          const fs = require('fs');
+          const d = JSON.parse(fs.readFileSync('shelter-health-source.json','utf8'));
+          if (!Array.isArray(d.shelters) || d.shelters.length === 0) {
+            throw new Error('Shelter API returned no shelters');
+          }
+          const oblast = Number(d.counts?.oblast_dsns || d.counts?.dsns || 0);
+          if (oblast <= 0) {
+            throw new Error('DSNS returned no Kyiv Oblast shelters');
+          }
+          const health = {
+            ok: true,
+            total: d.shelters.length,
+            kyiv_official: Number(d.counts?.kyiv_official || 0),
+            oblast_dsns: oblast,
+            partial: Boolean(d.partial),
+            checked_at: new Date().toISOString()
+          };
+          fs.writeFileSync('data-health.json', JSON.stringify(health, null, 2) + '\n');
+          console.log(health);
+          NODE
+
       - name: Point PWA to Worker
         env:
           WORKER_URL: ${{ steps.deploy.outputs.worker_url }}
@@ -63,7 +90,7 @@ jobs:
 
           git config user.name "bespeka-deploy-bot"
           git config user.email "actions@users.noreply.github.com"
-          git add alert-config.js
+          git add alert-config.js data-health.json
           if git diff --cached --quiet; then
             echo "PWA already points to this Worker"
             exit 0
