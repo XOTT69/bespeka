@@ -31,3 +31,22 @@ button,input{font:inherit}.hidden{display:none!important}.glass{background:var(-
   .list-screen{padding:78px 14px 80px;width:430px;background:rgba(9,17,29,.99)}.list-top{top:0;padding-top:0}.alerts-drawer{left:auto;width:420px;right:14px;bottom:14px;max-height:48%}.alerts-topbar{left:14px;right:auto;width:400px;top:78px}.alert-legend{top:128px;left:14px}
   .sheet{left:auto;right:14px;width:400px}
 }
+
+
+/* Bespeka custom 3D shelter map */
+.map-3d{background:#09111d}
+.map-style-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+.preview.classic{background:
+  linear-gradient(28deg,transparent 46%,rgba(80,105,125,.45) 47%,rgba(80,105,125,.45) 49%,transparent 50%),
+  linear-gradient(145deg,#dce8d2,#f4efe2 48%,#d9e7f0)}
+.preview.three-d{position:relative;overflow:hidden;background:linear-gradient(160deg,#101d2d 10%,#263a52 65%,#5e7890)}
+.preview.three-d:before,.preview.three-d:after{content:"";position:absolute;bottom:7px;width:28%;background:linear-gradient(135deg,#7690a8,#354b62);box-shadow:inset -5px -8px 0 rgba(0,0,0,.18);transform:skewY(-12deg)}
+.preview.three-d:before{height:58%;left:18%}.preview.three-d:after{height:78%;right:17%}
+.preview.three-d i{position:absolute;z-index:2;right:7px;top:6px;font-style:normal;font-size:8px;font-weight:900;color:#fff;background:rgba(0,0,0,.28);padding:3px 5px;border-radius:6px}
+.map-style-note{margin:8px 1px 0;color:var(--muted);font-size:8px;line-height:1.45}
+.walk3d-btn{width:100%;margin-top:7px;border:1px solid rgba(103,174,252,.24);background:linear-gradient(135deg,rgba(103,174,252,.15),rgba(103,174,252,.06));color:#d8ebff;border-radius:12px;padding:10px;font-size:10px;font-weight:800}
+#map3d .maplibregl-ctrl-bottom-right{bottom:8px;right:8px}
+#map3d .maplibregl-ctrl-group{background:rgba(10,19,32,.9);border:1px solid var(--line);box-shadow:0 8px 20px rgba(0,0,0,.25)}
+#map3d .maplibregl-ctrl-group button span{filter:invert(1)}
+#map3d .maplibregl-popup-content{background:#111d31;color:white;border-radius:12px;padding:9px 11px}
+#map3d .maplibregl-popup-tip{border-top-color:#111d31}
