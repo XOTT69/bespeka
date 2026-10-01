@@ -28,3 +28,5 @@ Workflow у `.github/workflows/pages.yml` публікує статичний с
 Цей застосунок допоміжний. Під час повітряної тривоги користуйтеся офіційними повідомленнями та перевіряйте фактичну доступність укриття.
 
 <!-- Pages deploy trigger -->
+
+<!-- live deploy sync: shelter snapshot + map fix -->
