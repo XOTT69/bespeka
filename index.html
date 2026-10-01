@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="uk">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <meta name="theme-color" content="#0b1220" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Безпека" />
+  <title>Безпека — укриття Київщини</title>
+  <link rel="manifest" href="./manifest.webmanifest" />
+  <link rel="icon" href="./icon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <div id="map" aria-label="Карта укриттів Київської області"></div>
+
+  <header class="topbar">
+    <div class="brand">
+      <span class="shield">🛡️</span>
+      <div>
+        <strong>Безпека</strong>
+        <small>Укриття Києва та області</small>
+      </div>
+    </div>
+    <button id="installBtn" class="icon-btn hidden" title="Встановити застосунок">＋</button>
+  </header>
+
+  <section class="search-panel">
+    <div class="search-row">
+      <input id="search" type="search" placeholder="Адреса, назва, населений пункт…" autocomplete="off" />
+      <button id="locateBtn" class="primary-btn" title="Знайти мене">⌖</button>
+    </div>
+    <div class="chips">
+      <button class="chip active" data-filter="all">Усі</button>
+      <button class="chip" data-filter="official">Офіційні</button>
+      <button class="chip" data-filter="shelter">Сховища</button>
+      <button class="chip" data-filter="simple">Найпростіші</button>
+      <button class="chip" data-filter="accessible">♿ Доступні</button>
+    </div>
+  </section>
+
+  <div id="status" class="status">Завантажую укриття…</div>
+
+  <aside id="sheet" class="sheet">
+    <div class="sheet-handle"></div>
+    <button id="closeSheet" class="close-btn" aria-label="Закрити">×</button>
+    <div id="sheetContent"></div>
+  </aside>
+
+  <button id="listBtn" class="floating-list">☰ <span id="countLabel">Укриття</span></button>
+
+  <section id="listPanel" class="list-panel">
+    <div class="list-head">
+      <div>
+        <strong>Найближчі укриття</strong>
+        <small id="listHint">Натисни ⌖, щоб сортувати за відстанню</small>
+      </div>
+      <button id="closeList" class="close-btn">×</button>
+    </div>
+    <div id="shelterList" class="shelter-list"></div>
+  </section>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+  <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+  <script src="./app.js"></script>
+</body>
+</html>
