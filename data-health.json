@@ -2,11 +2,11 @@
   "ok": true,
   "http_code": "200",
   "curl_exit": 0,
-  "total": 5069,
+  "total": 5549,
   "kyiv_official": 4190,
   "oblast_dsns": 1359,
   "partial": false,
   "error": null,
   "message": null,
-  "checked_at": "2026-10-01T22:16:54.192Z"
+  "checked_at": "2026-10-01T22:18:10.242Z"
 }
