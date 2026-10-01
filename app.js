@@ -17,16 +17,21 @@ const KYIV_DISTRICTS = [
 
 const CACHE_KEY='bespeka-shelters-v10';
 const FAV_KEY='bespeka-favorites-v1';
-const MAP_STYLE_KEY='bespeka-map-style-v1';
+const MAP_STYLE_KEY='bespeka-map-style-v2';
 const ALERT_OVERLAY_KEY='bespeka-alert-overlay-v1';
+const ALERTS_CACHE_KEY='bespeka-alerts-v1';
+const OVERPASS_ENDPOINTS=['https://overpass-api.de/api/interpreter','https://overpass.kumi.systems/api/interpreter'];
 const $=id=>document.getElementById(id);
 
 let shelters=[],filtered=[],activeFilter='all',searchQuery='',userPos=null,userMarker=null,nearestShelter=null,listLimit=250;
 let alerts=[],alertScope='kyiv',alertMapLayer=null,alertMapLabels=[],alertOverlayLayer=null,alertOverlayLabels=[];
-let currentTab='map',deferredPrompt=null;
+let currentTab='map',deferredPrompt=null,map3d=null,map3dReady=false,active3dShelter=null;
 const favorites=new Set(JSON.parse(localStorage.getItem(FAV_KEY)||'[]'));
 
 const baseLayers={
+  classic:L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
+    maxZoom:19,attribution:'© OpenStreetMap contributors'
+  }),
   clean:L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}',{
     maxZoom:16,attribution:'Tiles © Esri'
   }),
@@ -37,7 +42,7 @@ const baseLayers={
     maxZoom:19,attribution:'Tiles © Esri'
   })
 };
-let mapStyle=localStorage.getItem(MAP_STYLE_KEY)||'clean';
+let mapStyle=localStorage.getItem(MAP_STYLE_KEY)||'classic';
 let alertOverlayEnabled=localStorage.getItem(ALERT_OVERLAY_KEY)==='1';
 
 const map=L.map('map',{zoomControl:true,preferCanvas:true}).setView([50.35,30.42],9);
@@ -131,6 +136,7 @@ function renderShelterMap(){
     m.on('click',()=>openShelter(s));
     clusters.addLayer(m);
   }
+  render3dShelters();
 }
 function renderShelterList(){
   const list=[...filtered];
@@ -194,21 +200,184 @@ function openShelter(s){
       <a class="action main" href="${route}" target="_blank" rel="noopener">Прокласти маршрут</a>
       <a class="action alt" href="${osm}" target="_blank" rel="noopener">OSM</a>
     </div>
+    <button id="view3dBtn" class="walk3d-btn">◫ 3D біля входу</button>
     <button id="favToggle" class="fav-btn">${fav?'★ Прибрати з обраного':'☆ Додати в обране'}</button>
     <p class="note">Перевір фактичну доступність входу перед використанням. Дані показуються з офіційного джерела.</p>`;
   $('detailsSheet').classList.add('open');
+  $('view3dBtn').onclick=()=>flyToShelter3d(s);
   $('favToggle').onclick=()=>{favorites.has(s.id)?favorites.delete(s.id):favorites.add(s.id);saveFavs();openShelter(s);applyFilter(false)};
 }
 
+function shelterGeoJson(){
+  return {type:'FeatureCollection',features:filtered.map(s=>({
+    type:'Feature',
+    geometry:{type:'Point',coordinates:[s.lng,s.lat]},
+    properties:{id:s.id,source:s.source,name:s.name,address:s.address||''}
+  }))};
+}
+function emptyGeoJson(){return{type:'FeatureCollection',features:[]}}
+
+function add3dLayers(){
+  if(!map3d||!map3d.isStyleLoaded())return;
+  const style=map3d.getStyle();
+  const firstSymbol=style.layers?.find(l=>l.type==='symbol')?.id;
+  const vectorSourceId=Object.entries(style.sources||{}).find(([,v])=>v?.type==='vector')?.[0];
+  if(vectorSourceId&&!map3d.getLayer('bespeka-buildings-3d')){
+    try{
+      map3d.addLayer({
+        id:'bespeka-buildings-3d',
+        source:vectorSourceId,
+        'source-layer':'building',
+        type:'fill-extrusion',
+        minzoom:14.4,
+        paint:{
+          'fill-extrusion-color':['interpolate',['linear'],['zoom'],14.4,'#26384d',18,'#6d839a'],
+          'fill-extrusion-height':['coalesce',['get','render_height'],6],
+          'fill-extrusion-base':['coalesce',['get','render_min_height'],0],
+          'fill-extrusion-opacity':0.94,
+          'fill-extrusion-vertical-gradient':true
+        }
+      },firstSymbol);
+    }catch{}
+  }
+  if(!map3d.getSource('bespeka-shelters')){
+    map3d.addSource('bespeka-shelters',{type:'geojson',data:shelterGeoJson()});
+    map3d.addLayer({
+      id:'bespeka-shelters',
+      type:'circle',
+      source:'bespeka-shelters',
+      paint:{
+        'circle-radius':['interpolate',['linear'],['zoom'],8,3,14,6,18,9],
+        'circle-color':['match',['get','source'],'kyiv_official','#4ade8d','#67aefc'],
+        'circle-stroke-color':'#ffffff',
+        'circle-stroke-width':['interpolate',['linear'],['zoom'],8,1,18,2.5],
+        'circle-opacity':0.95
+      }
+    });
+    map3d.on('click','bespeka-shelters',e=>{
+      const id=e.features?.[0]?.properties?.id;
+      const s=shelters.find(x=>x.id===id);
+      if(s)openShelter(s);
+    });
+    map3d.on('mouseenter','bespeka-shelters',()=>map3d.getCanvas().style.cursor='pointer');
+    map3d.on('mouseleave','bespeka-shelters',()=>map3d.getCanvas().style.cursor='');
+  }
+  if(!map3d.getSource('bespeka-entrances')){
+    map3d.addSource('bespeka-entrances',{type:'geojson',data:emptyGeoJson()});
+    map3d.addLayer({
+      id:'bespeka-entrances',
+      type:'circle',
+      source:'bespeka-entrances',
+      minzoom:16,
+      paint:{
+        'circle-radius':7,
+        'circle-color':'#f2c94c',
+        'circle-stroke-color':'#111827',
+        'circle-stroke-width':2
+      }
+    });
+    map3d.on('click','bespeka-entrances',e=>{
+      const p=e.features?.[0]?.properties||{};
+      new maplibregl.Popup({closeButton:false,offset:12})
+        .setLngLat(e.lngLat)
+        .setHTML('<b>Вхід</b><br><small>'+esc(p.kind||'позначено в OpenStreetMap')+'</small>')
+        .addTo(map3d);
+    });
+  }
+}
+function init3dMap(){
+  if(map3d||!window.maplibregl)return;
+  const c=map.getCenter();
+  map3d=new maplibregl.Map({
+    container:'map3d',
+    style:'https://tiles.openfreemap.org/styles/liberty',
+    center:[c.lng,c.lat],
+    zoom:Math.max(8,map.getZoom()),
+    pitch:58,
+    bearing:-16,
+    maxPitch:85,
+    antialias:true,
+    attributionControl:true
+  });
+  map3d.addControl(new maplibregl.NavigationControl({visualizePitch:true}),'bottom-right');
+  map3d.on('style.load',()=>{map3dReady=true;add3dLayers();render3dShelters()});
+  map3d.on('error',()=>{if(!map3dReady)$('dataBadge').textContent='3D карта не завантажилась · спробуй ще раз'});
+}
+function render3dShelters(){
+  if(!map3d||!map3dReady)return;
+  add3dLayers();
+  const src=map3d.getSource('bespeka-shelters');
+  if(src)src.setData(shelterGeoJson());
+}
+async function loadMappedEntrances(s){
+  if(!map3d||!map3dReady)return;
+  const src=map3d.getSource('bespeka-entrances');
+  if(!src)return;
+  src.setData(emptyGeoJson());
+  const q='[out:json][timeout:12];node(around:120,'+s.lat+','+s.lng+')["entrance"];out body;';
+  for(const endpoint of OVERPASS_ENDPOINTS){
+    try{
+      const data=await fetchJson(endpoint+'?data='+encodeURIComponent(q),14000);
+      const features=(data.elements||[]).filter(x=>Number.isFinite(x.lat)&&Number.isFinite(x.lon)).map(x=>({
+        type:'Feature',
+        geometry:{type:'Point',coordinates:[x.lon,x.lat]},
+        properties:{kind:x.tags?.entrance||'вхід',name:x.tags?.name||''}
+      }));
+      src.setData({type:'FeatureCollection',features});
+      $('dataBadge').textContent=features.length?'3D · знайдено входів: '+features.length:'3D · входи поруч не позначені в OSM';
+      return;
+    }catch{}
+  }
+  $('dataBadge').textContent='3D · будинки OSM · входи тимчасово недоступні';
+}
+function flyToShelter3d(s){
+  active3dShelter=s;
+  $('detailsSheet').classList.remove('open');
+  switchTab('map');
+  setMapStyle('3d');
+  let attempts=0;
+  const go=()=>{
+    attempts++;
+    if(!map3d||!map3dReady){
+      if(attempts<50)return setTimeout(go,120);
+      $('dataBadge').textContent='Не вдалося відкрити 3D';
+      return;
+    }
+    map3d.flyTo({center:[s.lng,s.lat],zoom:18.2,pitch:72,bearing:-28,duration:1100,essential:true});
+    loadMappedEntrances(s);
+  };
+  go();
+}
 function setMapStyle(style){
-  if(!baseLayers[style])return;
+  if(style==='3d'){
+    if(!window.maplibregl){
+      $('dataBadge').textContent='3D режим недоступний у цьому браузері';
+      return;
+    }
+    init3dMap();
+    $('map').classList.add('hidden');
+    $('map3d').classList.remove('hidden');
+    mapStyle='3d';localStorage.setItem(MAP_STYLE_KEY,style);
+    document.querySelectorAll('.map-style').forEach(b=>b.classList.toggle('active',b.dataset.mapStyle===style));
+    setTimeout(()=>{map3d?.resize();render3dShelters()},60);
+    $('dataBadge').textContent='3D · обертай і нахиляй карту двома пальцями';
+    return;
+  }
+  if(!baseLayers[style])style='classic';
+  $('map3d').classList.add('hidden');
+  $('map').classList.remove('hidden');
   Object.values(baseLayers).forEach(l=>{if(map.hasLayer(l))map.removeLayer(l)});
   baseLayers[style].addTo(map);
   baseLayers[style].bringToBack();
   mapStyle=style;localStorage.setItem(MAP_STYLE_KEY,style);
   document.querySelectorAll('.map-style').forEach(b=>b.classList.toggle('active',b.dataset.mapStyle===style));
+  setTimeout(()=>map.invalidateSize(),40);
 }
-function fitKyiv(){map.fitBounds([[49.0,29.1],[51.7,32.3]],{padding:[20,20]})}
+function fitKyiv(){
+  if(mapStyle==='3d'&&map3d){
+    map3d.flyTo({center:[30.5,50.25],zoom:8.3,pitch:20,bearing:0,duration:700});
+  }else map.fitBounds([[49.0,29.1],[51.7,32.3]],{padding:[20,20]});
+}
 
 async function loadDistrictFeatures(){
   const chunks=await Promise.all(KYIV_DISTRICTS.map(async d=>{
@@ -381,11 +550,23 @@ async function loadAlerts(){
   try{
     const data=await fetchJson(ALERTS_URL+'?ts='+Date.now(),15000);
     alerts=Array.isArray(data.alerts)?data.alerts:[];
+    try{localStorage.setItem(ALERTS_CACHE_KEY,JSON.stringify({alerts,updated_at:data.updated_at}))}catch{}
     $('alertsUpdated').textContent='Оновлено '+formatTime(data.updated_at);
     renderThreats();
     if(alertMapLayer)restyleAlertMap();else await renderAlertMap();
     await syncAlertOverlay();
   }catch{
+    try{
+      const cached=JSON.parse(localStorage.getItem(ALERTS_CACHE_KEY)||'null');
+      if(cached?.alerts?.length){
+        alerts=cached.alerts;
+        $('alertsUpdated').textContent='Кеш · '+formatTime(cached.updated_at);
+        renderThreats();
+        if(alertMapLayer)restyleAlertMap();else await renderAlertMap();
+        await syncAlertOverlay();
+        return;
+      }
+    }catch{}
     $('alertsUpdated').textContent='Помилка оновлення';
   }
 }
@@ -454,13 +635,15 @@ $('locateBtn').onclick=()=>{
     userPos={lat:p.coords.latitude,lng:p.coords.longitude};
     if(userMarker)map.removeLayer(userMarker);
     userMarker=L.circleMarker([userPos.lat,userPos.lng],{radius:7,color:'#fff',weight:3,fillColor:'#f2c94c',fillOpacity:1}).addTo(map).bindPopup('Ви тут');
-    map.setView([userPos.lat,userPos.lng],14);
+    if(mapStyle==='3d'&&map3d){
+      map3d.flyTo({center:[userPos.lng,userPos.lat],zoom:17.3,pitch:65,bearing:-18,duration:800});
+    }else map.setView([userPos.lat,userPos.lng],14);
     applyFilter(false);
     $('dataBadge').textContent=shelters.length+' укриттів';
   },()=>{$('dataBadge').textContent='Геопозицію не отримано'},{enableHighAccuracy:true,timeout:12000});
 };
 $('fitBtn').onclick=fitKyiv;
-$('nearestCard').onclick=()=>{if(nearestShelter){openShelter(nearestShelter);map.setView([nearestShelter.lat,nearestShelter.lng],17)}};
+$('nearestCard').onclick=()=>{if(nearestShelter){openShelter(nearestShelter);if(mapStyle==='3d'&&map3d)map3d.flyTo({center:[nearestShelter.lng,nearestShelter.lat],zoom:18,pitch:70});else map.setView([nearestShelter.lat,nearestShelter.lng],17)}};
 
 $('layersBtn').onclick=()=>$('layersSheet').classList.add('open');
 $('closeLayers').onclick=()=>$('layersSheet').classList.remove('open');
