@@ -103,27 +103,20 @@ function openShelter(s){
   els('favToggle').onclick=()=>{if(favorites.has(s.id))favorites.delete(s.id);else favorites.add(s.id);saveFavs();openShelter(s);render()}
 }
 
-function setAlertState(active,text=''){
+function setAlertState(active,text='',updatedAt=''){
   const b=els('alertBanner');
   b.className='alert-banner '+(active===true?'alert-active':active===false?'alert-safe':'alert-unknown');
   els('alertTitle').textContent=active===true?'⚠️ ПОВІТРЯНА ТРИВОГА':active===false?'✓ Тривоги немає':'Тривоги';
-  els('alertText').textContent=text||'Статус невідомий';
+  const stamp=updatedAt?' · '+new Date(updatedAt).toLocaleTimeString('uk-UA',{hour:'2-digit',minute:'2-digit'}):'';
+  els('alertText').textContent=(text||'Статус невідомий')+stamp;
 }
 async function refreshAlert(){
-  if(!ALERT_CONFIG?.url){setAlertState(null,'Надішли свій API — підключу сюди');return}
   try{
-    const headers={...(ALERT_CONFIG.headers||{})};
-    const data=await fetchJson(ALERT_CONFIG.url,{headers},12000);
-    let active=null,text='';
-    if(typeof ALERT_CONFIG.parse==='function'){
-      const r=ALERT_CONFIG.parse(data);active=!!r.active;text=r.text||'';
-    } else {
-      const raw=JSON.stringify(data).toLowerCase();
-      active=raw.includes('"active":true')||raw.includes('"alert":true')||raw.includes('air_raid')||raw.includes('повітряна тривога');
-      text=active?'Київська область':'Київська область';
-    }
-    setAlertState(active,text);
-  }catch{setAlertState(null,'Не вдалося отримати статус')}
+    const data=await fetchJson('./alert-status.json?ts='+Date.now(),{},10000);
+    setAlertState(data.active===true,data.text||'Київська область',data.updated_at||'');
+  }catch{
+    setAlertState(null,'Статус тимчасово недоступний');
+  }
 }
 
 function setStatus(text,cls=''){const e=els('status');e.style.opacity='1';e.textContent=text;e.className='status '+cls;setTimeout(()=>{if(cls==='ok')e.style.opacity='.7'},4000)}
