@@ -33,6 +33,11 @@
       <div id="map" class="map"></div>
       <div id="map3d" class="map map-3d hidden" aria-label="3D карта укриттів"></div>
 
+      <div id="map3dHud" class="map3d-hud glass hidden" aria-label="Керування 3D картою">
+        <button id="district3dBtn" class="hud-btn active">Квартал</button>
+        <button id="street3dBtn" class="hud-btn">Рівень вулиці</button>
+      </div>
+
       <div class="map-search glass">
         <input id="mapSearch" type="search" placeholder="Адреса, населений пункт, укриття…" autocomplete="off">
         <button id="locateBtn" class="icon-action" title="Моя геопозиція">⌖</button>
@@ -95,7 +100,10 @@
       <section class="alerts-drawer">
         <div class="drawer-head">
           <div><strong id="threatsTitle">Райони Київщини</strong><small id="alertsSummary">Статус по районах</small></div>
-          <span id="activeRegionsCount" class="counter">0</span>
+          <div class="drawer-actions">
+            <button id="alertShelterBtn" class="alert-shelter-btn">⌖ Укриття</button>
+            <span id="activeRegionsCount" class="counter">0</span>
+          </div>
         </div>
         <div id="threatList" class="threat-list"></div>
       </section>
@@ -128,7 +136,7 @@
       <button class="map-style" data-map-style="satellite"><span class="preview satellite"></span><b>Супутник</b></button>
       <button class="map-style" data-map-style="3d"><span class="preview three-d"><i>3D</i></span><b>Безпека 3D</b></button>
     </div>
-    <p class="map-style-note">3D показує обʼєм будинків і позначені в OpenStreetMap входи біля вибраного укриття. Карту можна нахиляти й обертати двома пальцями.</p>
+    <p class="map-style-note">3D показує обʼєм будинків та входи будівель, позначені в OpenStreetMap. Ці точки не вважаються підтвердженим входом саме до укриття. Карту можна нахиляти й обертати двома пальцями.</p>
   </div>
 
   <div class="setting-row">
