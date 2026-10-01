@@ -398,15 +398,27 @@ async function loadShelters(){
       $('dataBadge').textContent=cached.shelters.length+' точок · кеш';
     }
   }catch{}
+
+  let data=null,source='live';
   try{
-    const data=await fetchJson(SHELTERS_URL+'?ts='+Date.now(),65000);
-    shelters=Array.isArray(data.shelters)?data.shelters:[];
+    data=await fetchJson(SHELTERS_URL+'?ts='+Date.now(),65000);
+    if(!Array.isArray(data?.shelters)||!data.shelters.length)throw new Error('empty live dataset');
+  }catch{
+    try{
+      data=await fetchJson('./shelters.json?ts='+Date.now(),20000);
+      if(!Array.isArray(data?.shelters)||!data.shelters.length)throw new Error('empty snapshot');
+      source='snapshot';
+    }catch{}
+  }
+
+  if(data?.shelters?.length){
+    shelters=data.shelters;
     localStorage.setItem(CACHE_KEY,JSON.stringify({shelters,updated_at:data.updated_at}));
     applyFilter(false);
     const city=data.counts?.kyiv_official||0,oblast=data.counts?.oblast_dsns||data.counts?.dsns||0;
-    $('dataBadge').textContent=shelters.length+' · Київ '+city+' · область '+oblast+(data.partial?' · частково':'');
-  }catch{
-    $('dataBadge').textContent=shelters.length?shelters.length+' точок · офлайн':'Не вдалося завантажити укриття';
+    $('dataBadge').textContent=shelters.length+' · Київ '+city+' · область '+oblast+(source==='snapshot'?' · резерв':'')+(data.partial?' · частково':'');
+  }else{
+    $('dataBadge').textContent=shelters.length?shelters.length+' точок · офлайн-кеш':'Укриття тимчасово недоступні';
   }
 }
 
