@@ -202,10 +202,14 @@ function openShelter(s){
       <a class="action main" href="${route}" target="_blank" rel="noopener">Прокласти маршрут</a>
       <a class="action alt" href="${osm}" target="_blank" rel="noopener">OSM</a>
     </div>
-    <button id="view3dBtn" class="walk3d-btn">◫ 3D біля входу</button>
+    <div class="map-actions">
+      <button id="showMapBtn" class="show-map-btn">⌖ Показати на карті</button>
+      <button id="view3dBtn" class="walk3d-btn">◫ 3D квартал</button>
+    </div>
     <button id="favToggle" class="fav-btn">${fav?'★ Прибрати з обраного':'☆ Додати в обране'}</button>
-    <p class="note">Перевір фактичну доступність входу перед використанням. Дані показуються з офіційного джерела.</p>`;
+    <p class="note">Перевір фактичну доступність входу перед використанням. Позначені на 3D-карті входи будівель не є підтвердженням входу саме до укриття.</p>`;
   $('detailsSheet').classList.add('open');
+  $('showMapBtn').onclick=()=>{switchTab('map');focusShelter(s,17);$('detailsSheet').classList.remove('open')};
   $('view3dBtn').onclick=()=>flyToShelter3d(s);
   $('favToggle').onclick=()=>{favorites.has(s.id)?favorites.delete(s.id):favorites.add(s.id);saveFavs();openShelter(s);applyFilter(false)};
 }
