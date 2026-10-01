@@ -13,3 +13,7 @@
 .alerts-scope{position:absolute;z-index:720;top:10px;left:50%;transform:translateX(-50%);display:flex;gap:4px;padding:4px;background:rgba(9,18,31,.92);border:1px solid var(--border);border-radius:13px;box-shadow:0 8px 22px rgba(0,0,0,.25)}
 .scope-btn{border:0;background:transparent;color:#91a4bd;border-radius:10px;padding:7px 12px;font-size:10px;font-weight:700;white-space:nowrap}
 .scope-btn.active{background:#233754;color:#fff}
+
+.threat-card.safe{background:rgba(21,73,48,.35);border-color:rgba(66,216,135,.18)}
+.threat-card.active{border-color:rgba(255,89,103,.18)}
+.safe-label{font-size:9px;color:#aef0c7;background:rgba(66,216,135,.10);padding:4px 7px;border-radius:999px;white-space:nowrap}
