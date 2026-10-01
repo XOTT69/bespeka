@@ -1,151 +1,259 @@
-const KYIV_API = 'https://gisserver.kyivcity.gov.ua/mayno/rest/services/KYIV_API/Public_protection/MapServer/0/query?where=1%3D1&outFields=*&returnGeometry=true&f=geojson&outSR=4326';
-const OVERPASS = 'https://overpass-api.de/api/interpreter';
-const OSM_AREA = 3600071248;
-const CACHE_KEY = 'bespeka-shelters-v4';
+const ALERT_PROXY_URL = window.BESPEKA_ALERT_PROXY_URL || './alert-status.json';
+const API_BASE = ALERT_PROXY_URL.replace(/\/status(?:\?.*)?$/, '');
+const SHELTERS_URL = API_BASE.startsWith('http') ? API_BASE + '/shelters' : './shelters.json';
+const ALERTS_URL = API_BASE.startsWith('http') ? API_BASE + '/alerts' : './alert-status.json';
+const UKRAINE_GEOJSON = 'https://cdn.jsdelivr.net/gh/darmat1/ukraine-geo-data@main/geodata/Ukraine.geojson';
+const CACHE_KEY = 'bespeka-shelters-v6';
 const FAV_KEY = 'bespeka-favorites-v1';
 
-const ALERT_PROXY_URL = window.BESPEKA_ALERT_PROXY_URL || './alert-status.json';
+const $ = id => document.getElementById(id);
+const favorites = new Set(JSON.parse(localStorage.getItem(FAV_KEY) || '[]'));
+let shelters = [], filtered = [], activeFilter = 'all', userPos = null, userMarker = null, nearestShelter = null;
+let currentTab = 'map', deferredPrompt = null, alerts = [], alertGeoLayer = null, alertsLoaded = false;
 
-const map = L.map('map',{zoomControl:true}).setView([50.36,30.43],9);
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap contributors'}).addTo(map);
-const clusters = L.markerClusterGroup({showCoverageOnHover:false,maxClusterRadius:48});
+const map = L.map('map', { zoomControl: true }).setView([50.36, 30.43], 9);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(map);
+const clusters = L.markerClusterGroup({ showCoverageOnHover: false, maxClusterRadius: 46 });
 map.addLayer(clusters);
 
-let shelters=[], filtered=[], userPos=null, userMarker=null, deferredPrompt=null, activeFilter='all', nearestShelter=null;
-const favorites = new Set(JSON.parse(localStorage.getItem(FAV_KEY)||'[]'));
-const els = id => document.getElementById(id);
+const alertsMap = L.map('alertsMap', { zoomControl: true, attributionControl: false }).setView([48.8, 31.2], 5);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 12, attribution: '© OpenStreetMap' }).addTo(alertsMap);
 
 function esc(v=''){return String(v).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}
-function textProp(p,...keys){for(const k of keys){if(p?.[k]!==undefined&&p[k]!==null&&String(p[k]).trim()) return String(p[k]).trim()}return ''}
-function norm(s=''){return s.toLowerCase().normalize('NFKD').replace(/[’'"]/g,'')}
-function classify(p,source){const raw=norm([p.type_building,p.type,p.shelter_type,p.description,p.name].filter(Boolean).join(' '));if(raw.includes('найпрост')||raw.includes('simple'))return'simple';if(raw.includes('сховищ')||raw.includes('bomb')||raw.includes('shelter'))return'shelter';return source==='official'?'shelter':'simple'}
-function isAccessible(p){const raw=norm([p.disabled,p.accessibility,p.wheelchair,p.invalid,p.mgn].filter(Boolean).join(' '));return ['yes','так','true','доступ'].some(x=>raw.includes(x))}
-function hoursOf(p){return textProp(p,'opening_hours','work_time','working_hours','hours')}
-function openLabel(p){const h=hoursOf(p);if(!h)return 'Невідомо';if(/24\/7|цілодоб/i.test(h))return '24/7';return h}
-function photoUrl(p){const direct=textProp(p,'image','photo','image_url');if(/^https?:\/\//i.test(direct))return direct;const commons=textProp(p,'wikimedia_commons');if(commons){const name=commons.replace(/^File:/i,'').trim();if(name)return'https://commons.wikimedia.org/wiki/Special:Redirect/file/'+encodeURIComponent(name)}return''}
-function addressOf(p){const full=textProp(p,'address','full_address','adress','addr');if(full)return full;const street=textProp(p,'addr:street','street','street_name');const house=textProp(p,'addr:housenumber','house','building_num');const city=textProp(p,'addr:city','city','settlement');return [city,[street,house].filter(Boolean).join(', ')].filter(Boolean).join(', ')||'Адресу не вказано'}
-function nameOf(p,type){return textProp(p,'name','title','type_building')||(type==='simple'?'Найпростіше укриття':'Укриття')}
-function toPoint(feature,source){if(!feature?.geometry||feature.geometry.type!=='Point')return null;const [lng,lat]=feature.geometry.coordinates;if(!Number.isFinite(lat)||!Number.isFinite(lng))return null;const p=feature.properties||{},type=classify(p,source);return{id:source+':' +(feature.id||p.id||p.objectid||lat+','+lng),lat,lng,source,type,accessible:isAccessible(p),name:nameOf(p,type),address:addressOf(p),photo:photoUrl(p),hours:openLabel(p),props:p}}
-function osmElementToPoint(e){const lat=e.lat??e.center?.lat,lng=e.lon??e.center?.lon;if(!Number.isFinite(lat)||!Number.isFinite(lng))return null;const p=e.tags||{},type=classify(p,'osm');return{id:'osm:'+e.type+':'+e.id,lat,lng,source:'osm',type,accessible:isAccessible(p),name:nameOf(p,type),address:addressOf(p),photo:photoUrl(p),hours:openLabel(p),props:p}}
-async function fetchJson(url,opts={},timeout=18000){const ctl=new AbortController(),t=setTimeout(()=>ctl.abort(),timeout);try{const r=await fetch(url,{...opts,signal:ctl.signal});if(!r.ok)throw new Error(r.status);return await r.json()}finally{clearTimeout(t)}}
-async function loadOfficial(){const gj=await fetchJson(KYIV_API);return(gj.features||[]).map(f=>toPoint(f,'official')).filter(Boolean)}
-async function loadOsm(){const q=`[out:json][timeout:30];area(${OSM_AREA})->.a;(nwr["amenity"="shelter"](area.a);nwr["shelter_type"](area.a);nwr["emergency"="shelter"](area.a);nwr["military"="bunker"]["bunker_type"="civil_defense"](area.a););out center tags;`;const j=await fetchJson(OVERPASS,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8'},body:'data='+encodeURIComponent(q)},35000);return(j.elements||[]).map(osmElementToPoint).filter(Boolean)}
-function dedupe(items){const out=[],seen=new Set();for(const s of items){const key=Math.round(s.lat*10000)+'|'+Math.round(s.lng*10000);if(seen.has(key))continue;seen.add(key);out.push(s)}return out}
-function saveCache(items){try{localStorage.setItem(CACHE_KEY,JSON.stringify({t:Date.now(),items}))}catch{}}
-function readCache(){try{return JSON.parse(localStorage.getItem(CACHE_KEY)||'null')}catch{return null}}
+function norm(s=''){return String(s).toLowerCase().normalize('NFKD').replace(/[’'"]/g,'')}
 function saveFavs(){localStorage.setItem(FAV_KEY,JSON.stringify([...favorites]))}
-function markerIcon(source){return L.divIcon({className:'',html:`<div class="marker-dot ${source==='official'?'marker-official':'marker-osm'}"></div>`,iconSize:[18,18],iconAnchor:[9,9]})}
 function distance(a,b){const R=6371,dLat=(b.lat-a.lat)*Math.PI/180,dLon=(b.lng-a.lng)*Math.PI/180;const x=Math.sin(dLat/2)**2+Math.cos(a.lat*Math.PI/180)*Math.cos(b.lat*Math.PI/180)*Math.sin(dLon/2)**2;return 2*R*Math.asin(Math.sqrt(x))}
 function formatDist(km){return km<1?Math.round(km*1000)+' м':(km<10?km.toFixed(1):Math.round(km))+' км'}
+function formatTime(v){if(!v)return'';try{return new Date(v).toLocaleTimeString('uk-UA',{hour:'2-digit',minute:'2-digit'})}catch{return''}}
+function markerIcon(source){return L.divIcon({className:'',html:`<div class="marker-dot ${source==='kyiv_official'?'marker-official':'marker-osm'}"></div>`,iconSize:[17,17],iconAnchor:[8,8]})}
+async function fetchJson(url, timeout=65000){const c=new AbortController(),t=setTimeout(()=>c.abort(),timeout);try{const r=await fetch(url,{signal:c.signal,cache:'no-store'});if(!r.ok)throw new Error(String(r.status));return await r.json()}finally{clearTimeout(t)}}
 
-function updateNearest(){
-  if(!userPos||!shelters.length){els('nearestCard').classList.add('hidden');return}
-  nearestShelter=[...shelters].sort((a,b)=>distance(userPos,a)-distance(userPos,b))[0];
-  const d=formatDist(distance(userPos,nearestShelter));
-  els('nearestName').textContent=nearestShelter.name;
-  els('nearestMeta').textContent=d+' · '+nearestShelter.address;
-  els('nearestCard').classList.remove('hidden');
-}
+function sourceLabel(s){return s.source==='kyiv_official'?'Офіційні дані Києва':'OpenStreetMap · Київська область'}
+function typeLabel(s){return s.type==='simple'?'Найпростіше укриття':'Укриття / сховище'}
 
-function render(){
-  const q=norm(els('search').value.trim());
+function applyFilter(){
+  const q=norm($('search').value.trim());
   filtered=shelters.filter(s=>{
-    if(activeFilter==='official'&&s.source!=='official')return false;
-    if(activeFilter==='shelter'&&s.type!=='shelter')return false;
-    if(activeFilter==='simple'&&s.type!=='simple')return false;
+    if(activeFilter==='oblast'&&s.source!=='osm')return false;
+    if(activeFilter==='kyiv'&&s.source!=='kyiv_official')return false;
     if(activeFilter==='accessible'&&!s.accessible)return false;
     if(activeFilter==='favorites'&&!favorites.has(s.id))return false;
-    if(q&&!norm(s.name+' '+s.address+' '+JSON.stringify(s.props)).includes(q))return false;
+    if(q&&!norm([s.name,s.address,s.city].join(' ')).includes(q))return false;
     return true;
   });
-  clusters.clearLayers();
-  for(const s of filtered){const m=L.marker([s.lat,s.lng],{icon:markerIcon(s.source)});m.on('click',()=>openShelter(s));clusters.addLayer(m)}
-  els('countLabel').textContent=filtered.length+' укриттів';renderList();updateNearest();
+  renderShelterMap();
+  renderShelterList();
+  updateNearest();
 }
 
-function renderList(){
-  const list=[...filtered];if(userPos)list.sort((a,b)=>distance(userPos,a)-distance(userPos,b));
-  els('shelterList').innerHTML=list.slice(0,120).map(s=>{
-    const d=userPos?'<span class="distance">'+formatDist(distance(userPos,s))+'</span>':'';
+function renderShelterMap(){
+  clusters.clearLayers();
+  for(const s of filtered){
+    const m=L.marker([s.lat,s.lng],{icon:markerIcon(s.source)});
+    m.on('click',()=>openShelter(s));
+    clusters.addLayer(m);
+  }
+}
+
+function renderShelterList(){
+  const list=[...filtered];
+  if(userPos) list.sort((a,b)=>distance(userPos,a)-distance(userPos,b));
+  else list.sort((a,b)=>(a.city||a.address||'').localeCompare(b.city||b.address||'','uk'));
+  $('listCount').textContent=list.length+' укриттів';
+  $('listHint').textContent=userPos?'За відстанню від вас':'Київ та Київська область';
+
+  $('shelterList').innerHTML=list.map(s=>{
+    const d=userPos?`<span class="distance">${formatDist(distance(userPos,s))}</span>`:'';
     const fav=favorites.has(s.id)?'★ ':'';
-    return `<button class="list-item" data-id="${esc(s.id)}">${d}<b>${fav}${esc(s.name)}</b><small>${esc(s.address)} · ${s.source==='official'?'офіційні дані Києва':'OpenStreetMap'}</small></button>`;
-  }).join('')||'<p class="legend-note">Нічого не знайдено. Зміни пошук або фільтр.</p>';
-  document.querySelectorAll('.list-item').forEach(b=>b.onclick=()=>{const s=shelters.find(x=>x.id===b.dataset.id);if(s){openShelter(s);map.setView([s.lat,s.lng],17);els('listPanel').classList.remove('open')}})
+    return `<button class="list-item" data-id="${esc(s.id)}">
+      <div class="list-item-top">
+        <span class="list-pin">⌖</span>
+        <span class="list-main"><b>${fav}${esc(s.name)}</b><small>${esc(s.address)}</small></span>
+        ${d}
+      </div>
+      <div class="mini-tags"><span class="mini-tag ${s.source==='kyiv_official'?'official':''}">${s.source==='kyiv_official'?'Київ · офіційне':'Область · OSM'}</span>${s.accessible?'<span class="mini-tag">♿ доступність</span>':''}</div>
+    </button>`;
+  }).join('') || '<div class="empty-state">За цим пошуком нічого не знайдено</div>';
+
+  document.querySelectorAll('.list-item').forEach(el=>el.onclick=()=>{
+    const s=shelters.find(x=>x.id===el.dataset.id);
+    if(s) openShelter(s);
+  });
+}
+
+function updateNearest(){
+  if(!userPos||!shelters.length){$('nearestCard').classList.add('hidden');return}
+  nearestShelter=[...shelters].sort((a,b)=>distance(userPos,a)-distance(userPos,b))[0];
+  $('nearestName').textContent=nearestShelter.name;
+  $('nearestMeta').textContent=formatDist(distance(userPos,nearestShelter))+' · '+nearestShelter.address;
+  $('nearestCard').classList.remove('hidden');
 }
 
 function openShelter(s){
   const dist=userPos?formatDist(distance(userPos,s)):'—';
-  const source=s.source==='official'?'Офіційні дані Києва':'OpenStreetMap';
-  const photo=s.photo?`<img class="photo" src="${esc(s.photo)}" alt="Фото укриття" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">`:'';
   const route=`https://www.google.com/maps/dir/?api=1&destination=${s.lat},${s.lng}`;
   const osm=`https://www.openstreetmap.org/?mlat=${s.lat}&mlon=${s.lng}#map=18/${s.lat}/${s.lng}`;
+  const photo=s.photo?`<img class="photo" src="${esc(s.photo)}" alt="Фото укриття" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">`:'';
   const fav=favorites.has(s.id);
-  els('sheetContent').innerHTML=`
-    <h2>${esc(s.name)}</h2><div class="meta">${esc(s.address)}</div>
+  $('sheetContent').innerHTML=`
+    <h2>${esc(s.name)}</h2>
+    <div class="meta">${esc(s.address)}</div>
     ${photo}
     <div class="badges">
-      <span class="badge ${s.source==='official'?'green':'blue'}">${source}</span>
-      <span class="badge">${s.type==='simple'?'Найпростіше укриття':'Укриття / сховище'}</span>
+      <span class="badge ${s.source==='kyiv_official'?'green':'blue'}">${esc(sourceLabel(s))}</span>
+      <span class="badge">${esc(typeLabel(s))}</span>
       ${s.accessible?'<span class="badge">♿ Доступність позначена</span>':''}
-      <span class="badge warn">🕒 ${esc(s.hours||'Невідомо')}</span>
+      ${s.hours?`<span class="badge">🕒 ${esc(s.hours)}</span>`:''}
     </div>
     <div class="detail-grid">
       <div class="detail"><span>Відстань</span><b>${dist}</b></div>
-      <div class="detail"><span>Координати</span><b>${s.lat.toFixed(5)}, ${s.lng.toFixed(5)}</b></div>
+      <div class="detail"><span>Місткість</span><b>${esc(s.capacity||'Не вказано')}</b></div>
     </div>
     <div class="actions">
-      <a class="action main" href="${route}" target="_blank" rel="noopener">Прокласти маршрут</a>
-      <a class="action alt" href="${osm}" target="_blank" rel="noopener">Відкрити на OSM</a>
+      <a class="action main" href="${route}" target="_blank" rel="noopener">Маршрут</a>
+      <a class="action alt" href="${osm}" target="_blank" rel="noopener">OSM</a>
     </div>
     <button id="favToggle" class="fav-btn">${fav?'★ Прибрати з обраного':'☆ Додати в обране'}</button>
-    <p class="legend-note">Перед використанням перевіряй фактичну доступність входу. Дані можуть змінюватися; застосунок показує джерело кожної точки.</p>`;
-  els('sheet').classList.add('open');
-  els('favToggle').onclick=()=>{if(favorites.has(s.id))favorites.delete(s.id);else favorites.add(s.id);saveFavs();openShelter(s);render()}
+    <p class="note">Перед використанням перевір фактичну доступність входу. Джерело точки показано вище.</p>`;
+  $('sheet').classList.add('open');
+  $('favToggle').onclick=()=>{favorites.has(s.id)?favorites.delete(s.id):favorites.add(s.id);saveFavs();openShelter(s);applyFilter()};
 }
 
-function setAlertState(active,text='',updatedAt=''){
-  const b=els('alertBanner');
-  b.className='alert-banner '+(active===true?'alert-active':active===false?'alert-safe':'alert-unknown');
-  els('alertTitle').textContent=active===true?'⚠️ ПОВІТРЯНА ТРИВОГА':active===false?'✓ Тривоги немає':'Тривоги';
-  const stamp=updatedAt?' · '+new Date(updatedAt).toLocaleTimeString('uk-UA',{hour:'2-digit',minute:'2-digit'}):'';
-  els('alertText').textContent=(text||'Статус невідомий')+stamp;
+function threatLabel(t){
+  const map={drones:'БпЛА',drone:'БпЛА',ballistic:'Балістика',ballistics:'Балістика',missiles:'Ракети',missile:'Ракети',aviation:'Авіація',aircraft:'Авіація',rocket:'Ракетна загроза'};
+  return map[t]||String(t||'').replaceAll('_',' ');
 }
-async function refreshAlert(){
+function alertTypeLabel(t){
+  return {air_raid:'Повітряна тривога',artillery_shelling:'Артобстріл',urban_fights:'Міські бої',chemical:'Хімічна загроза',nuclear:'Ядерна / радіаційна загроза'}[t]||t||'Тривога';
+}
+function oblastAlerts(name){
+  return alerts.filter(a=>a.location_oblast===name||a.location_title===name);
+}
+
+function setKyivBanner(data){
+  const b=$('alertBanner');
+  const active=data.active===true;
+  b.className='alert-banner '+(data.active===null||data.active===undefined?'alert-unknown':active?'alert-active':'alert-safe');
+  const details=[...(data.alert_types||[]).map(alertTypeLabel),...(data.threats||[]).map(threatLabel)];
+  $('alertTitle').textContent=active?(details[0]||'Тривога у Київській області'):'Тривоги немає';
+  $('alertText').textContent=active?(details.slice(1,3).join(' · ')||'Київська область'):'Київська область · '+formatTime(data.updated_at);
+}
+
+async function refreshStatus(){
   try{
     const sep=ALERT_PROXY_URL.includes('?')?'&':'?';
-    const data=await fetchJson(ALERT_PROXY_URL+sep+'ts='+Date.now(),{},10000);
-    setAlertState(data.active===true,data.text||'Київська область',data.updated_at||'');
+    const data=await fetchJson(ALERT_PROXY_URL+sep+'ts='+Date.now(),12000);
+    setKyivBanner(data);
   }catch{
-    setAlertState(null,'Статус тимчасово недоступний');
+    $('alertBanner').className='alert-banner alert-unknown';
+    $('alertTitle').textContent='Статус тривоги недоступний';
+    $('alertText').textContent='Спробую оновити автоматично';
   }
 }
 
-function setStatus(text,cls=''){const e=els('status');e.style.opacity='1';e.textContent=text;e.className='status '+cls;setTimeout(()=>{if(cls==='ok')e.style.opacity='.7'},4000)}
-async function loadData(){
-  const cache=readCache();if(cache?.items?.length){shelters=cache.items;render();setStatus('Показано кеш · оновлюю дані…')}
-  const results=await Promise.allSettled([loadOfficial(),loadOsm()]);
-  const fresh=results.flatMap(r=>r.status==='fulfilled'?r.value:[]);
-  if(fresh.length){shelters=dedupe(fresh);saveCache(shelters);render();const off=results[0].status==='fulfilled'?'Київ ✓':'Київ — помилка';const osm=results[1].status==='fulfilled'?'область ✓':'область — помилка';setStatus(`${shelters.length} точок · ${off} · ${osm}`,'ok')}
-  else if(!shelters.length)setStatus('Не вдалося завантажити дані. Перевір інтернет.','error')
+async function loadAlerts(){
+  try{
+    const data=await fetchJson(ALERTS_URL+'?ts='+Date.now(),15000);
+    alerts=Array.isArray(data.alerts)?data.alerts:[];
+    $('alertsUpdated').textContent='Оновлено '+formatTime(data.updated_at);
+    renderThreats();
+    if(!alertsLoaded){await renderAlertMap();alertsLoaded=true}else styleAlertMap();
+  }catch{
+    $('threatList').innerHTML='<div class="empty-state">Не вдалося оновити карту тривог</div>';
+  }
 }
 
-els('search').addEventListener('input',render);
-document.querySelectorAll('.chip').forEach(c=>c.onclick=()=>{document.querySelectorAll('.chip').forEach(x=>x.classList.remove('active'));c.classList.add('active');activeFilter=c.dataset.filter;render()});
-els('locateBtn').onclick=()=>{
-  if(!navigator.geolocation)return setStatus('Геолокація недоступна','error');
-  setStatus('Визначаю місцезнаходження…');
+function renderThreats(){
+  const oblastMap=new Map();
+  for(const a of alerts){
+    const key=a.location_oblast||a.location_title||'Інше';
+    if(!oblastMap.has(key))oblastMap.set(key,[]);
+    oblastMap.get(key).push(a);
+  }
+  const groups=[...oblastMap.entries()].sort((a,b)=>a[0].localeCompare(b[0],'uk'));
+  $('activeRegionsCount').textContent=String(groups.length);
+  $('threatList').innerHTML=groups.map(([name,items])=>{
+    const allThreats=[...new Set(items.flatMap(x=>x.threats||[]).map(x=>x.threat_type).filter(Boolean))];
+    const types=[...new Set(items.map(x=>x.alert_type).filter(Boolean))];
+    const started=items.map(x=>x.started_at).filter(Boolean).sort()[0];
+    const local=items.map(x=>x.location_title).filter(x=>x&&x!==name);
+    return `<div class="threat-card">
+      <div class="threat-card-head"><b>${esc(name)}</b><time>${started?'з '+formatTime(started):''}</time></div>
+      <p>${esc([...new Set(local)].slice(0,4).join(' · ')||types.map(alertTypeLabel).join(' · '))}</p>
+      <div class="threat-chips">${[...types.map(alertTypeLabel),...allThreats.map(threatLabel)].slice(0,5).map(x=>`<span class="threat-chip">${esc(x)}</span>`).join('')}</div>
+    </div>`;
+  }).join('')||'<div class="empty-state">Активних тривог зараз немає</div>';
+}
+
+async function renderAlertMap(){
+  const geo=await fetchJson(UKRAINE_GEOJSON,25000);
+  alertGeoLayer=L.geoJSON(geo,{
+    style:feature=>alertRegionStyle(feature?.properties?.name),
+    onEachFeature:(feature,layer)=>{
+      const name=feature?.properties?.name||'Область';
+      layer.on('click',()=>{
+        const items=oblastAlerts(name);
+        const msg=items.length?items.map(x=>alertTypeLabel(x.alert_type)).filter(Boolean).join(' · '):'Активних тривог немає';
+        layer.bindPopup(`<b>${esc(name)}</b><br>${esc(msg)}`).openPopup();
+      });
+    }
+  }).addTo(alertsMap);
+  try{alertsMap.fitBounds(alertGeoLayer.getBounds(),{padding:[4,4]})}catch{}
+}
+function alertRegionStyle(name){
+  const items=oblastAlerts(name);
+  const active=items.length>0;
+  const yellow=items.length&&items.every(x=>x.alert_level==='yellow');
+  return {color:active?(yellow?'#e8bc4f':'#ff5967'):'#52627a',weight:1,fillColor:active?(yellow?'#e8bc4f':'#ff5967'):'#18263a',fillOpacity:active?.62:.22};
+}
+function styleAlertMap(){if(alertGeoLayer)alertGeoLayer.eachLayer(layer=>layer.setStyle(alertRegionStyle(layer.feature?.properties?.name)))}
+
+async function loadShelters(){
+  const cached=JSON.parse(localStorage.getItem(CACHE_KEY)||'null');
+  if(cached?.shelters?.length){shelters=cached.shelters;applyFilter();$('dataBadge').textContent=cached.shelters.length+' точок · кеш'}
+  try{
+    const data=await fetchJson(SHELTERS_URL+'?ts='+Date.now(),65000);
+    shelters=Array.isArray(data.shelters)?data.shelters:[];
+    localStorage.setItem(CACHE_KEY,JSON.stringify({shelters,updated_at:data.updated_at}));
+    applyFilter();
+    const a=data.counts?.kyiv_official||0,b=data.counts?.oblast_osm||0;
+    $('dataBadge').textContent=shelters.length+' точок · Київ '+a+' · область '+b+(data.partial?' · частково':'');
+  }catch{
+    $('dataBadge').textContent=shelters.length?shelters.length+' точок · офлайн-кеш':'Не вдалося завантажити укриття';
+  }
+}
+
+function switchTab(tab){
+  currentTab=tab;
+  document.querySelectorAll('.nav-btn').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));
+  $('mapView').classList.toggle('active',tab==='map');
+  $('listView').classList.toggle('active',tab==='list');
+  $('alertsView').classList.toggle('active',tab==='alerts');
+  $('shelterControls').classList.toggle('hidden',tab==='alerts');
+  setTimeout(()=>{if(tab==='map')map.invalidateSize();if(tab==='alerts'){alertsMap.invalidateSize();loadAlerts()}},80);
+}
+
+document.querySelectorAll('.nav-btn').forEach(b=>b.onclick=()=>switchTab(b.dataset.tab));
+$('alertBanner').onclick=()=>switchTab('alerts');
+$('search').addEventListener('input',applyFilter);
+document.querySelectorAll('.chip').forEach(c=>c.onclick=()=>{document.querySelectorAll('.chip').forEach(x=>x.classList.remove('active'));c.classList.add('active');activeFilter=c.dataset.filter;applyFilter()});
+$('locateBtn').onclick=()=>{
+  if(!navigator.geolocation)return;
+  $('dataBadge').textContent='Визначаю місцезнаходження…';
   navigator.geolocation.getCurrentPosition(p=>{
-    userPos={lat:p.coords.latitude,lng:p.coords.longitude};map.setView([userPos.lat,userPos.lng],14);
+    userPos={lat:p.coords.latitude,lng:p.coords.longitude};
     if(userMarker)map.removeLayer(userMarker);
-    userMarker=L.circleMarker([userPos.lat,userPos.lng],{radius:8,color:'#fff',weight:3,fillColor:'#ffcb57',fillOpacity:1}).addTo(map).bindPopup('Ви тут');
-    render();els('listHint').textContent='Відсортовано за відстанню від вас';setStatus('Геолокацію визначено','ok')
-  },()=>setStatus('Не вдалося отримати геолокацію','error'),{enableHighAccuracy:true,timeout:12000});
+    userMarker=L.circleMarker([userPos.lat,userPos.lng],{radius:8,color:'#fff',weight:3,fillColor:'#f4c95d',fillOpacity:1}).addTo(map).bindPopup('Ви тут');
+    map.setView([userPos.lat,userPos.lng],14);applyFilter();$('dataBadge').textContent=shelters.length+' точок';
+  },()=>{$('dataBadge').textContent='Не вдалося визначити геолокацію'},{enableHighAccuracy:true,timeout:12000});
 };
-els('nearestGo').onclick=()=>{if(nearestShelter){openShelter(nearestShelter);map.setView([nearestShelter.lat,nearestShelter.lng],17)}};
-els('closeSheet').onclick=()=>els('sheet').classList.remove('open');
-els('listBtn').onclick=()=>els('listPanel').classList.add('open');
-els('closeList').onclick=()=>els('listPanel').classList.remove('open');
-window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();deferredPrompt=e;els('installBtn').classList.remove('hidden')});
-els('installBtn').onclick=async()=>{if(deferredPrompt){deferredPrompt.prompt();await deferredPrompt.userChoice;deferredPrompt=null;els('installBtn').classList.add('hidden')}};
+$('nearestCard').onclick=()=>{if(nearestShelter){openShelter(nearestShelter);map.setView([nearestShelter.lat,nearestShelter.lng],17)}};
+$('closeSheet').onclick=()=> $('sheet').classList.remove('open');
+window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();deferredPrompt=e;$('installBtn').classList.remove('hidden')});
+$('installBtn').onclick=async()=>{if(deferredPrompt){deferredPrompt.prompt();await deferredPrompt.userChoice;deferredPrompt=null;$('installBtn').classList.add('hidden')}};
 if('serviceWorker' in navigator)navigator.serviceWorker.register('./sw.js').catch(()=>{});
-loadData();refreshAlert();setInterval(refreshAlert,60000);
+
+loadShelters();
+refreshStatus();
+setInterval(refreshStatus,30000);
+setInterval(()=>{if(currentTab==='alerts')loadAlerts()},45000);
