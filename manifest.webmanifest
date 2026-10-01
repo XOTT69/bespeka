@@ -10,6 +10,45 @@
   "background_color": "#0b1220",
   "theme_color": "#0b1220",
   "icons": [
-    {"src":"./icon.svg","sizes":"any","type":"image/svg+xml","purpose":"any maskable"}
+    {
+      "src": "./icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "display_override": [
+    "standalone",
+    "minimal-ui"
+  ],
+  "shortcuts": [
+    {
+      "name": "Укриття",
+      "short_name": "Укриття",
+      "description": "Карта укриттів",
+      "url": "./?tab=map",
+      "icons": [
+        {
+          "src": "./icon.svg",
+          "sizes": "any",
+          "type": "image/svg+xml",
+          "purpose": "any maskable"
+        }
+      ]
+    },
+    {
+      "name": "Тривоги",
+      "short_name": "Тривоги",
+      "description": "Карта тривог",
+      "url": "./?tab=alerts",
+      "icons": [
+        {
+          "src": "./icon.svg",
+          "sizes": "any",
+          "type": "image/svg+xml",
+          "purpose": "any maskable"
+        }
+      ]
+    }
   ]
 }
