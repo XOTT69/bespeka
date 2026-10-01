@@ -3,7 +3,16 @@ const API_BASE = ALERT_PROXY_URL.replace(/\/status(?:\?.*)?$/, '');
 const SHELTERS_URL = API_BASE.startsWith('http') ? API_BASE + '/shelters' : './shelters.json';
 const ALERTS_URL = API_BASE.startsWith('http') ? API_BASE + '/alerts' : './alert-status.json';
 const UKRAINE_GEOJSON = 'https://cdn.jsdelivr.net/gh/darmat1/ukraine-geo-data@main/geodata/Ukraine.geojson';
-const KYIV_RAIONS_GEOJSON = 'https://cdn.jsdelivr.net/gh/darmat1/ukraine-geo-data@main/geodata/kyyivska_oblast.geojson';
+const KYIV_DISTRICTS = [
+  {name:'Бучанський район',file:'kyyivska_oblast.buchanskyy_rayon.geojson'},
+  {name:'Фастівський район',file:'kyyivska_oblast.fastivskyy_rayon.geojson'},
+  {name:'Білоцерківський район',file:'kyyivska_oblast.bilotserkivskyy_rayon.geojson'},
+  {name:'Бориспільський район',file:'kyyivska_oblast.boryspilskyy_rayon.geojson'},
+  {name:'Броварський район',file:'kyyivska_oblast.brovarskyy_rayon.geojson'},
+  {name:'Вишгородський район',file:'kyyivska_oblast.vyshhorodskyy_rayon.geojson'},
+  {name:'Обухівський район',file:'kyyivska_oblast.obukhivskyy_rayon.geojson'}
+];
+const GEO_BASE = 'https://cdn.jsdelivr.net/gh/darmat1/ukraine-geo-data@main/geodata/';
 const CACHE_KEY = 'bespeka-shelters-v8';
 const FAV_KEY = 'bespeka-favorites-v1';
 
@@ -187,11 +196,10 @@ async function loadAlerts(){
 function renderThreats(){
   if(alertScope==='kyiv'){
     $('threatsTitle').textContent='Тривоги по районах';
-    const raions=['Бучанський район','Фастівський район','Білоцерківський район','Бориспільський район','Броварський район','Вишгородський район','Обухівський район'];
-    const groups=raions.map(name=>[name,raionAlerts(name)]).filter(([,items])=>items.length);
-    $('activeRegionsCount').textContent=String(groups.length);
-    $('threatList').innerHTML=groups.map(([name,items])=>threatCard(name,items)).join('')||
-      '<div class="empty-state">У районах Київської області активних тривог зараз немає</div>';
+    const groups=KYIV_DISTRICTS.map(x=>[x.name,raionAlerts(x.name)]);
+    const activeCount=groups.filter(([,items])=>items.length).length;
+    $('activeRegionsCount').textContent=String(activeCount);
+    $('threatList').innerHTML=groups.map(([name,items])=>threatCard(name,items,true)).join('');
     return;
   }
 
@@ -204,16 +212,22 @@ function renderThreats(){
   }
   const groups=[...oblastMap.entries()].sort((a,b)=>a[0].localeCompare(b[0],'uk'));
   $('activeRegionsCount').textContent=String(groups.length);
-  $('threatList').innerHTML=groups.map(([name,items])=>threatCard(name,items)).join('')||
+  $('threatList').innerHTML=groups.map(([name,items])=>threatCard(name,items,false)).join('')||
     '<div class="empty-state">Активних тривог зараз немає</div>';
 }
 
-function threatCard(name,items){
+function threatCard(name,items,showSafe=false){
+  if(!items.length && showSafe){
+    return `<div class="threat-card safe">
+      <div class="threat-card-head"><b>${esc(name)}</b><span class="safe-label">✓ Немає тривоги</span></div>
+      <p>Активних загроз для району зараз немає</p>
+    </div>`;
+  }
   const allThreats=[...new Set(items.flatMap(x=>x.threats||[]).map(x=>x.threat_type).filter(Boolean))];
   const types=[...new Set(items.map(x=>x.alert_type).filter(Boolean))];
   const started=items.map(x=>x.started_at).filter(Boolean).sort()[0];
   const local=items.map(x=>x.location_title).filter(x=>x&&x!==name&&x!=='Київська область');
-  return `<div class="threat-card">
+  return `<div class="threat-card active">
     <div class="threat-card-head"><b>${esc(name)}</b><time>${started?'з '+formatTime(started):''}</time></div>
     <p>${esc([...new Set(local)].slice(0,4).join(' · ')||types.map(alertTypeLabel).join(' · '))}</p>
     <div class="threat-chips">${[...types.map(alertTypeLabel),...allThreats.map(threatLabel)].slice(0,5).map(x=>`<span class="threat-chip">${esc(x)}</span>`).join('')}</div>
@@ -222,11 +236,26 @@ function threatCard(name,items){
 
 async function renderAlertMap(){
   if(alertGeoLayer){alertsMap.removeLayer(alertGeoLayer);alertGeoLayer=null}
-  const geo=await fetchJson(alertScope==='kyiv'?KYIV_RAIONS_GEOJSON:UKRAINE_GEOJSON,25000);
+
+  let geo;
+  if(alertScope==='kyiv'){
+    const parts=await Promise.all(KYIV_DISTRICTS.map(async d=>{
+      const g=await fetchJson(GEO_BASE+d.file,30000);
+      return (g.features||[]).map(f=>({
+        ...f,
+        properties:{...(f.properties||{}),__district:d.name,__community:f.properties?.name||''}
+      }));
+    }));
+    geo={type:'FeatureCollection',features:parts.flat()};
+  }else{
+    geo=await fetchJson(UKRAINE_GEOJSON,25000);
+  }
+
   alertGeoLayer=L.geoJSON(geo,{
-    style:feature=>alertRegionStyle(feature?.properties?.name),
+    style:feature=>alertRegionStyle(alertScope==='kyiv'?feature?.properties?.__district:feature?.properties?.name),
     onEachFeature:(feature,layer)=>{
-      const name=feature?.properties?.name||'Регіон';
+      const name=alertScope==='kyiv'?(feature?.properties?.__district||'Район'):(feature?.properties?.name||'Регіон');
+      const community=alertScope==='kyiv'?(feature?.properties?.__community||''):'';
       layer.on('click',()=>{
         const items=alertScope==='kyiv'?raionAlerts(name):oblastAlerts(name);
         const labels=[...new Set(items.flatMap(x=>[
@@ -234,24 +263,30 @@ async function renderAlertMap(){
           ...(x.threats||[]).map(t=>threatLabel(t.threat_type))
         ]).filter(Boolean))];
         const msg=items.length?(labels.join(' · ')||'Активна тривога'):'Активних тривог немає';
-        layer.bindPopup(`<b>${esc(name)}</b><br>${esc(msg)}`).openPopup();
+        const subtitle=community&&community!==name?'<br><small>'+esc(community)+'</small>':'';
+        layer.bindPopup(`<b>${esc(name)}</b>${subtitle}<br>${esc(msg)}`).openPopup();
       });
     }
   }).addTo(alertsMap);
-  try{alertsMap.fitBounds(alertGeoLayer.getBounds(),{padding:[6,6]})}catch{}
+  try{alertsMap.fitBounds(alertGeoLayer.getBounds(),{padding:[8,8]})}catch{}
 }
 function alertRegionStyle(name){
   const items=alertScope==='kyiv'?raionAlerts(name):oblastAlerts(name);
   const active=items.length>0;
   const yellow=items.length&&items.every(x=>x.alert_level==='yellow');
   return {
-    color:active?(yellow?'#e8bc4f':'#ff5967'):'#52627a',
-    weight:alertScope==='kyiv'?1.5:1,
-    fillColor:active?(yellow?'#e8bc4f':'#ff5967'):'#18263a',
-    fillOpacity:active?.66:.22
+    color:active?(yellow?'#e8bc4f':'#ff5967'):'#4d6078',
+    weight:alertScope==='kyiv'?1.15:1,
+    fillColor:active?(yellow?'#e8bc4f':'#ff5967'):'#173021',
+    fillOpacity:active?.68:.34
   };
 }
-function styleAlertMap(){if(alertGeoLayer)alertGeoLayer.eachLayer(layer=>layer.setStyle(alertRegionStyle(layer.feature?.properties?.name)))}
+function styleAlertMap(){
+  if(alertGeoLayer)alertGeoLayer.eachLayer(layer=>{
+    const name=alertScope==='kyiv'?layer.feature?.properties?.__district:layer.feature?.properties?.name;
+    layer.setStyle(alertRegionStyle(name));
+  });
+}
 
 async function loadShelters(){
   const cached=JSON.parse(localStorage.getItem(CACHE_KEY)||'null');
