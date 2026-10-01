@@ -286,7 +286,7 @@ function add3dLayers(){
       const p=e.features?.[0]?.properties||{};
       new maplibregl.Popup({closeButton:false,offset:12})
         .setLngLat(e.lngLat)
-        .setHTML('<b>Вхід</b><br><small>'+esc(p.kind||'позначено в OpenStreetMap')+'</small>')
+        .setHTML('<b>Вхід будівлі</b><br><small>'+esc(p.kind||'позначено в OpenStreetMap')+' · не підтверджено як вхід до укриття</small>')
         .addTo(map3d);
     });
   }
@@ -330,11 +330,22 @@ async function loadMappedEntrances(s){
         properties:{kind:x.tags?.entrance||'вхід',name:x.tags?.name||''}
       }));
       src.setData({type:'FeatureCollection',features});
-      $('dataBadge').textContent=features.length?'3D · знайдено входів: '+features.length:'3D · входи поруч не позначені в OSM';
+      $('dataBadge').textContent=features.length?'3D · входів будівель поруч: '+features.length:'3D · входи будівель поруч не позначені в OSM';
       return;
     }catch{}
   }
   $('dataBadge').textContent='3D · будинки OSM · входи тимчасово недоступні';
+}
+function set3dHudMode(mode){
+  document.querySelectorAll('.hud-btn').forEach(b=>b.classList.toggle('active',b.id===(mode==='street'?'street3dBtn':'district3dBtn')));
+}
+function focusShelter(s,zoom=17){
+  if(!s)return;
+  if(mapStyle==='3d'&&map3d){
+    active3dShelter=s;
+    render3dShelters();
+    map3d.flyTo({center:[s.lng,s.lat],zoom:Math.max(zoom,17.5),pitch:64,bearing:-18,duration:800,essential:true});
+  }else map.setView([s.lat,s.lng],zoom);
 }
 function flyToShelter3d(s){
   active3dShelter=s;
@@ -349,7 +360,8 @@ function flyToShelter3d(s){
       $('dataBadge').textContent='Не вдалося відкрити 3D';
       return;
     }
-    map3d.flyTo({center:[s.lng,s.lat],zoom:18.2,pitch:72,bearing:-28,duration:1100,essential:true});
+    set3dHudMode('district');
+    map3d.flyTo({center:[s.lng,s.lat],zoom:18.2,pitch:68,bearing:-28,duration:1100,essential:true});
     loadMappedEntrances(s);
   };
   go();
@@ -363,6 +375,7 @@ function setMapStyle(style){
     init3dMap();
     $('map').classList.add('hidden');
     $('map3d').classList.remove('hidden');
+    $('map3dHud').classList.remove('hidden');
     mapStyle='3d';localStorage.setItem(MAP_STYLE_KEY,style);
     document.querySelectorAll('.map-style').forEach(b=>b.classList.toggle('active',b.dataset.mapStyle===style));
     setTimeout(()=>{map3d?.resize();render3dShelters()},60);
@@ -371,6 +384,7 @@ function setMapStyle(style){
   }
   if(!baseLayers[style])style='classic';
   $('map3d').classList.add('hidden');
+  $('map3dHud').classList.add('hidden');
   $('map').classList.remove('hidden');
   Object.values(baseLayers).forEach(l=>{if(map.hasLayer(l))map.removeLayer(l)});
   baseLayers[style].addTo(map);
@@ -652,8 +666,25 @@ $('locateBtn').onclick=()=>{
   },()=>{$('dataBadge').textContent='Геопозицію не отримано'},{enableHighAccuracy:true,timeout:12000});
 };
 $('fitBtn').onclick=fitKyiv;
-$('nearestCard').onclick=()=>{if(nearestShelter){openShelter(nearestShelter);if(mapStyle==='3d'&&map3d)map3d.flyTo({center:[nearestShelter.lng,nearestShelter.lat],zoom:18,pitch:70});else map.setView([nearestShelter.lat,nearestShelter.lng],17)}};
+$('nearestCard').onclick=()=>{if(nearestShelter){openShelter(nearestShelter);focusShelter(nearestShelter,17)}};
+$('alertShelterBtn').onclick=()=>{
+  switchTab('map');
+  if(userPos&&nearestShelter){openShelter(nearestShelter);focusShelter(nearestShelter,17)}
+  else $('locateBtn').click();
+};
 
+$('district3dBtn').onclick=()=>{
+  if(!map3d)return;
+  set3dHudMode('district');
+  const c=active3dShelter?[active3dShelter.lng,active3dShelter.lat]:map3d.getCenter().toArray();
+  map3d.flyTo({center:c,zoom:active3dShelter?18.2:Math.max(map3d.getZoom(),16.5),pitch:58,bearing:-18,duration:650,essential:true});
+};
+$('street3dBtn').onclick=()=>{
+  if(!map3d)return;
+  set3dHudMode('street');
+  const c=active3dShelter?[active3dShelter.lng,active3dShelter.lat]:map3d.getCenter().toArray();
+  map3d.flyTo({center:c,zoom:active3dShelter?19.1:Math.max(map3d.getZoom(),18.4),pitch:82,bearing:map3d.getBearing()||-24,duration:650,essential:true});
+};
 $('layersBtn').onclick=()=>$('layersSheet').classList.add('open');
 $('closeLayers').onclick=()=>$('layersSheet').classList.remove('open');
 $('closeDetails').onclick=()=>$('detailsSheet').classList.remove('open');
