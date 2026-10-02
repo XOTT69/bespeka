@@ -1,6 +1,6 @@
 {
-  "active": null,
-  "status": "unknown",
+  "active": false,
+  "status": "safe",
   "text": "Київська область",
-  "updated_at": null
+  "updated_at": "2026-10-02T01:09:42Z"
 }
